@@ -1,0 +1,44 @@
+{
+  "order": {
+    "id": "manual-1001",
+    "number": "1001",
+    "paymentStatus": "PAID",
+    "priceSummary": {
+      "total": {
+        "amount": "1299"
+      }
+    },
+    "shippingInfo": {
+      "logistics": {
+        "shippingDestination": {
+          "address": {
+            "addressLine": "12 MG Road",
+            "city": "Bengaluru",
+            "subdivision": "KA",
+            "postalCode": "560001",
+            "country": "IN"
+          },
+          "contactDetails": {
+            "firstName": "Asha",
+            "lastName": "Rao",
+            "phone": "9876543210"
+          }
+        }
+      }
+    },
+    "lineItems": [
+      {
+        "productName": {
+          "original": "Cotton Shirt"
+        },
+        "quantity": 1,
+        "physicalProperties": {
+          "sku": "SHIRT-001"
+        },
+        "totalPriceAfterTax": {
+          "amount": "1299"
+        }
+      }
+    ]
+  }
+}
