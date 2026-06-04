@@ -364,6 +364,12 @@ alter table pick_pack_task_items enable row level security;
 alter table stock_movements enable row level security;
 alter table audit_log enable row level security;
 
+grant usage on schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
+alter default privileges in schema public grant select, insert, update, delete on tables to service_role;
+alter default privileges in schema public grant usage, select on sequences to service_role;
+
 insert into courier_partners(code, name, capabilities)
 values
   ('delhivery', 'Delhivery', '{"forward":true,"reverse":true,"domestic":true,"international_pending":true}'::jsonb),

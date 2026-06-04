@@ -1,0 +1,15 @@
+[Unit]
+Description=Wix Delhivery booking app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/saipi/wixdelhivery
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
