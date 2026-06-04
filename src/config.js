@@ -16,7 +16,19 @@ export function getConfig() {
       siteId: process.env.WIX_SITE_ID || '',
       accountId: process.env.WIX_ACCOUNT_ID || '',
       webhookPublicKey: normalizePem(process.env.WIX_WEBHOOK_PUBLIC_KEY || ''),
-      webhookSecret: process.env.WIX_WEBHOOK_SECRET || ''
+      webhookSecret: process.env.WIX_WEBHOOK_SECRET || '',
+      requestTimeoutMs: positiveNumber(process.env.WIX_REQUEST_TIMEOUT_SECONDS, 30) * 1000,
+      fulfillmentSyncEnabled: process.env.WIX_FULFILLMENT_SYNC_ENABLED !== 'false',
+      trackingUrlTemplate:
+        process.env.WIX_TRACKING_URL_TEMPLATE ||
+        process.env.DELHIVERY_TRACKING_URL_TEMPLATE ||
+        'https://www.delhivery.com/track/package/{waybill}',
+      orderSync: {
+        enabled: process.env.WIX_ORDER_SYNC_ENABLED === 'true',
+        intervalMs: positiveNumber(process.env.WIX_ORDER_SYNC_INTERVAL_MINUTES, 5) * 60 * 1000,
+        pageSize: clamp(Number(process.env.WIX_ORDER_SYNC_PAGE_SIZE || 25), 1, 100),
+        maxPages: clamp(Number(process.env.WIX_ORDER_SYNC_MAX_PAGES || 1), 1, 20)
+      }
     },
     supabase: {
       url: process.env.SUPABASE_URL || '',
@@ -35,6 +47,8 @@ export function getConfig() {
       returnState: process.env.DELHIVERY_RETURN_STATE || '',
       returnPincode: process.env.DELHIVERY_RETURN_PINCODE || process.env.DELHIVERY_PICKUP_PINCODE || '',
       returnPhone: process.env.DELHIVERY_RETURN_PHONE || '',
+      labelUrl: process.env.DELHIVERY_LABEL_URL || '',
+      trackingUrlTemplate: process.env.DELHIVERY_TRACKING_URL_TEMPLATE || 'https://www.delhivery.com/track/package/{waybill}',
       invoiceUrl:
         delhiveryEnv === 'production'
           ? 'https://track.delhivery.com/api/kinko/v1/invoice/charges/.json'
@@ -93,4 +107,14 @@ function parseInternationalRateCard(value) {
   } catch {
     return {};
   }
+}
+
+function positiveNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function clamp(value, min, max) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
 }

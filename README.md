@@ -106,6 +106,23 @@ Backfill all Wix orders into Supabase after Supabase is configured:
 npm run backfill:wix-orders
 ```
 
+Keep Supabase orders updated automatically by enabling the background Wix sync:
+
+```text
+WIX_ORDER_SYNC_ENABLED=true
+WIX_ORDER_SYNC_INTERVAL_MINUTES=5
+WIX_ORDER_SYNC_PAGE_SIZE=25
+WIX_ORDER_SYNC_MAX_PAGES=1
+WIX_REQUEST_TIMEOUT_SECONDS=30
+```
+
+The sync sorts Wix orders by `updatedDate` and upserts the newest pages into Supabase on each interval. Check or trigger it manually:
+
+```bash
+curl http://localhost:3000/api/sync/wix-orders
+curl -X POST http://localhost:3000/api/sync/wix-orders
+```
+
 Courier partners are selected through an adapter layer. Delhivery is active; Shree Maruti is scaffolded and returns explicit not-configured errors until credentials and API schema are added.
 
 Pull recent paid, unfulfilled Wix orders:

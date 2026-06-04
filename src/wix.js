@@ -33,9 +33,12 @@ export async function fetchWixOrder(orderId, config) {
     throw new Error('WIX_AUTH_TOKEN is required to fetch Wix order details.');
   }
 
+  const controller = createTimeoutController(config);
   const response = await fetch(`https://www.wixapis.com/ecom/v1/orders/${encodeURIComponent(orderId)}`, {
-    headers: wixHeaders(config)
+    headers: wixHeaders(config),
+    signal: controller.signal
   });
+  controller.clear();
 
   const body = await safeJson(response);
   if (!response.ok) {
@@ -51,11 +54,14 @@ export async function searchWixOrders(options = {}, config) {
   }
 
   const requestBody = buildSearchOrdersRequest(options);
+  const controller = createTimeoutController(config);
   const response = await fetch('https://www.wixapis.com/ecom/v1/orders/search', {
     method: 'POST',
     headers: wixHeaders(config),
-    body: JSON.stringify(requestBody)
+    body: JSON.stringify(requestBody),
+    signal: controller.signal
   });
+  controller.clear();
 
   const body = await safeJson(response);
   if (!response.ok) {
@@ -148,4 +154,14 @@ function removeEmpty(object) {
   return Object.fromEntries(
     Object.entries(object).filter(([, value]) => value !== undefined && value !== null && value !== '')
   );
+}
+
+function createTimeoutController(config) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.wix.requestTimeoutMs || 30_000);
+  timeout.unref?.();
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timeout)
+  };
 }

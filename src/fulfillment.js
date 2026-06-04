@@ -107,6 +107,22 @@ export function normalizeShipmentRecord(record) {
   };
 }
 
+export function buildOrderShipmentSummary(shipment, observedAt = new Date().toISOString()) {
+  const shipmentUpdatedAt = shipment.updated_at || observedAt;
+  const waybill = shipment.waybill || shipment.upload_wbn || null;
+
+  return {
+    shipment_status: shipment.status || null,
+    shipment_waybill: waybill,
+    shipment_courier_code: shipment.courier_code || null,
+    shipment_service_code: shipment.courier_service_code || null,
+    shipment_service_mode: shipment.service_mode || null,
+    shipment_booked_at: shipment.status === 'booked' && waybill ? shipmentUpdatedAt : null,
+    shipment_updated_at: shipmentUpdatedAt,
+    updated_at: observedAt
+  };
+}
+
 export function buildAudit(tableName, recordId, action, beforeJson, afterJson, reason) {
   return {
     table_name: tableName,

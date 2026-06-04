@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeShipmentRecord, normalizeWixOrder } from '../src/fulfillment.js';
+import { buildOrderShipmentSummary, normalizeShipmentRecord, normalizeWixOrder } from '../src/fulfillment.js';
 import { getCourierAdapter, listCourierServices } from '../src/couriers/index.js';
 
 test('normalizes Wix order into customer, order, items, and payment refs', () => {
@@ -41,6 +41,45 @@ test('normalizes shipment record without deleting raw request and response data'
   assert.equal(record.courier_service_code, 'surface');
   assert.equal(record.request_payload.shipments[0].order, '1001');
   assert.equal(record.carrier_response.success, true);
+});
+
+test('builds order shipment summary with awb and service details', () => {
+  const summary = buildOrderShipmentSummary(
+    {
+      status: 'booked',
+      waybill: 'awb-1',
+      courier_code: 'delhivery',
+      courier_service_code: 'surface',
+      service_mode: 'Surface',
+      updated_at: '2026-06-04T10:00:00.000Z'
+    },
+    '2026-06-04T10:01:00.000Z'
+  );
+
+  assert.equal(summary.shipment_status, 'booked');
+  assert.equal(summary.shipment_waybill, 'awb-1');
+  assert.equal(summary.shipment_courier_code, 'delhivery');
+  assert.equal(summary.shipment_service_code, 'surface');
+  assert.equal(summary.shipment_service_mode, 'Surface');
+  assert.equal(summary.shipment_booked_at, '2026-06-04T10:00:00.000Z');
+  assert.equal(summary.shipment_updated_at, '2026-06-04T10:00:00.000Z');
+});
+
+test('does not mark order shipment as booked until an awb exists', () => {
+  const summary = buildOrderShipmentSummary(
+    {
+      status: 'pending',
+      courier_code: 'delhivery',
+      courier_service_code: 'express',
+      service_mode: 'Express'
+    },
+    '2026-06-04T10:01:00.000Z'
+  );
+
+  assert.equal(summary.shipment_status, 'pending');
+  assert.equal(summary.shipment_waybill, null);
+  assert.equal(summary.shipment_booked_at, null);
+  assert.equal(summary.shipment_updated_at, '2026-06-04T10:01:00.000Z');
 });
 
 test('lists Delhivery and Shree Maruti courier adapters', () => {

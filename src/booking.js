@@ -1,5 +1,6 @@
 import { getCourierAdapter } from './couriers/index.js';
-import { findShipmentByOrderId, upsertShipment, upsertWixOrder } from './store.js';
+import { findShipmentByOrderId, updateOrderWixFulfillment, upsertShipment, upsertWixOrder } from './store.js';
+import { createWixFulfillment } from './wixFulfillment.js';
 import { fetchWixOrder } from './wix.js';
 
 export async function bookWixOrder(order, config, metadata = {}) {
@@ -63,6 +64,7 @@ export async function bookWixOrder(order, config, metadata = {}) {
       waybill: extractWaybill(delhiveryResponse),
       error: ''
     });
+    await syncBookedShipmentToWix(persistedOrder, booked, bookingConfig);
     return { shipment: booked, skipped: false };
   } catch (error) {
     const failed = await upsertShipment({
@@ -71,6 +73,35 @@ export async function bookWixOrder(order, config, metadata = {}) {
       error: error.message
     });
     throw Object.assign(error, { shipment: failed });
+  }
+}
+
+export async function syncBookedShipmentToWix(order, shipment, config) {
+  if (!order?.id || !shipment?.waybill) return null;
+  await updateOrderWixFulfillment(order.id, {
+    status: 'pending',
+    error: null
+  });
+
+  try {
+    const result = await createWixFulfillment(order, normalizeShipmentForWix(shipment), config);
+    if (result.skipped) {
+      return updateOrderWixFulfillment(order.id, {
+        status: result.status,
+        error: null
+      });
+    }
+    return updateOrderWixFulfillment(order.id, {
+      status: 'synced',
+      fulfillmentId: result.fulfillmentId,
+      syncedAt: new Date().toISOString(),
+      error: null
+    });
+  } catch (error) {
+    return updateOrderWixFulfillment(order.id, {
+      status: 'failed',
+      error: error.message
+    });
   }
 }
 
@@ -105,4 +136,15 @@ function extractWaybill(response) {
     response?.upload_wbn ||
     ''
   );
+}
+
+function normalizeShipmentForWix(shipment) {
+  return {
+    waybill: shipment.waybill,
+    courier_code: shipment.source || 'delhivery',
+    courier_service_code: shipment.shippingMode === 'S' ? 'surface' : 'express',
+    service_mode:
+      shipment.internationalService ||
+      (shipment.shippingMode === 'S' ? 'Surface' : 'Express')
+  };
 }

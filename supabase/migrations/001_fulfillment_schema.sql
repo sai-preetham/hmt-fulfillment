@@ -56,6 +56,20 @@ create table if not exists orders (
   shipping_address_id uuid references customer_addresses(id),
   billing_address_id uuid references customer_addresses(id),
   selected_shipping_title text,
+  shipment_status text,
+  shipment_waybill text,
+  shipment_courier_code text,
+  shipment_service_code text,
+  shipment_service_mode text,
+  shipment_booked_at timestamptz,
+  shipment_updated_at timestamptz,
+  shipment_label_url text,
+  shipment_label_format text,
+  shipment_label_error text,
+  wix_fulfillment_status text,
+  wix_fulfillment_id text,
+  wix_fulfillment_synced_at timestamptz,
+  wix_fulfillment_error text,
   source_created_at timestamptz,
   source_updated_at timestamptz,
   raw_order jsonb not null default '{}'::jsonb,
@@ -212,6 +226,10 @@ create table if not exists shipments (
   cod_amount numeric not null default 0,
   request_payload jsonb not null default '{}'::jsonb,
   carrier_response jsonb,
+  label_url text,
+  label_format text,
+  label_generated_at timestamptz,
+  label_error text,
   error text,
   message text,
   created_at timestamptz not null default now(),
@@ -324,11 +342,34 @@ create table if not exists audit_log (
   created_at timestamptz not null default now()
 );
 
+alter table orders add column if not exists shipment_status text;
+alter table orders add column if not exists shipment_waybill text;
+alter table orders add column if not exists shipment_courier_code text;
+alter table orders add column if not exists shipment_service_code text;
+alter table orders add column if not exists shipment_service_mode text;
+alter table orders add column if not exists shipment_booked_at timestamptz;
+alter table orders add column if not exists shipment_updated_at timestamptz;
+alter table orders add column if not exists shipment_label_url text;
+alter table orders add column if not exists shipment_label_format text;
+alter table orders add column if not exists shipment_label_error text;
+alter table orders add column if not exists wix_fulfillment_status text;
+alter table orders add column if not exists wix_fulfillment_id text;
+alter table orders add column if not exists wix_fulfillment_synced_at timestamptz;
+alter table orders add column if not exists wix_fulfillment_error text;
+
+alter table shipments add column if not exists label_url text;
+alter table shipments add column if not exists label_format text;
+alter table shipments add column if not exists label_generated_at timestamptz;
+alter table shipments add column if not exists label_error text;
+
 create index if not exists idx_customer_addresses_customer_id on customer_addresses(customer_id);
 create index if not exists idx_orders_customer_id on orders(customer_id);
 create index if not exists idx_orders_order_number on orders(order_number);
 create index if not exists idx_orders_payment_status on orders(payment_status);
 create index if not exists idx_orders_fulfillment_status on orders(fulfillment_status);
+create index if not exists idx_orders_shipment_status on orders(shipment_status);
+create index if not exists idx_orders_shipment_waybill on orders(shipment_waybill);
+create index if not exists idx_orders_wix_fulfillment_status on orders(wix_fulfillment_status);
 create index if not exists idx_order_items_order_id on order_items(order_id);
 create index if not exists idx_payment_refs_order_id on payment_refs(order_id);
 create index if not exists idx_shipments_order_id on shipments(order_id);
