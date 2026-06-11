@@ -49,6 +49,10 @@ export function getConfig() {
       returnPhone: process.env.DELHIVERY_RETURN_PHONE || '',
       labelUrl: process.env.DELHIVERY_LABEL_URL || '',
       trackingUrlTemplate: process.env.DELHIVERY_TRACKING_URL_TEMPLATE || 'https://www.delhivery.com/track/package/{waybill}',
+      trackingApiUrl: 'https://track.delhivery.com/api/v1/packages/json/',
+      trackingEnabled: process.env.DELHIVERY_TRACKING_ENABLED === 'true',
+      trackingIntervalMs: positiveNumber(process.env.DELHIVERY_TRACKING_INTERVAL_MINUTES, 30) * 60_000,
+      trackingBatchSize: clamp(Number(process.env.DELHIVERY_TRACKING_BATCH_SIZE || 25), 1, 50),
       invoiceUrl:
         delhiveryEnv === 'production'
           ? 'https://track.delhivery.com/api/kinko/v1/invoice/charges/.json'
@@ -57,6 +61,15 @@ export function getConfig() {
         delhiveryEnv === 'production'
           ? 'https://track.delhivery.com/api/cmu/create.json'
           : 'https://staging-express.delhivery.com/api/cmu/create.json'
+    },
+    shiprocket: {
+      baseUrl: process.env.SHIPROCKET_BASE_URL || 'https://apiv2.shiprocket.in/v1/external',
+      token: process.env.SHIPROCKET_API_TOKEN || process.env.SHIPROCKET_AUTH_TOKEN || '',
+      email: process.env.SHIPROCKET_EMAIL || '',
+      password: process.env.SHIPROCKET_PASSWORD || '',
+      trackingUrlTemplate: process.env.SHIPROCKET_TRACKING_URL_TEMPLATE || 'https://www.shiprocket.in/shipment-tracking/{waybill}',
+      trackingEnabled: process.env.SHIPROCKET_TRACKING_ENABLED === 'true',
+      trackingBatchSize: clamp(Number(process.env.SHIPROCKET_TRACKING_BATCH_SIZE || 10), 1, 25)
     },
     defaults: {
       sellerGstTin: process.env.DEFAULT_SELLER_GST_TIN || '',

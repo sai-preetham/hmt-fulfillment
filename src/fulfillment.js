@@ -99,7 +99,7 @@ export function normalizeShipmentRecord(record) {
     width_cm: numberAmount(payloadShipment.shipment_width || record.requestPayload?.shipment?.dimensionsCm?.width),
     height_cm: numberAmount(payloadShipment.shipment_height || record.requestPayload?.shipment?.dimensionsCm?.height),
     weight_grams: numberAmount(payloadShipment.weight || record.requestPayload?.shipment?.weightGrams),
-    cod_amount: numberAmount(payloadShipment.cod_amount),
+    cod_amount: numberAmount(payloadShipment.cod_amount) || 0,
     request_payload: record.requestPayload || {},
     carrier_response: record.delhiveryResponse || null,
     error: record.error || null,
@@ -110,17 +110,23 @@ export function normalizeShipmentRecord(record) {
 export function buildOrderShipmentSummary(shipment, observedAt = new Date().toISOString()) {
   const shipmentUpdatedAt = shipment.updated_at || observedAt;
   const waybill = shipment.waybill || shipment.upload_wbn || null;
-
-  return {
+  const summary = {
     shipment_status: shipment.status || null,
     shipment_waybill: waybill,
     shipment_courier_code: shipment.courier_code || null,
     shipment_service_code: shipment.courier_service_code || null,
     shipment_service_mode: shipment.service_mode || null,
-    shipment_booked_at: shipment.status === 'booked' && waybill ? shipmentUpdatedAt : null,
     shipment_updated_at: shipmentUpdatedAt,
     updated_at: observedAt
   };
+
+  if (shipment.status === 'booked' && waybill) {
+    summary.shipment_booked_at = shipmentUpdatedAt;
+  } else if (!waybill) {
+    summary.shipment_booked_at = null;
+  }
+
+  return summary;
 }
 
 export function buildAudit(tableName, recordId, action, beforeJson, afterJson, reason) {

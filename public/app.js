@@ -2,13 +2,16 @@ const ordersBody = document.querySelector('#ordersBody');
 const ordersStatusText = document.querySelector('#ordersStatusText');
 const refreshButton = document.querySelector('#refreshButton');
 const syncButton = document.querySelector('#syncButton');
+const syncFulfilledButton = document.querySelector('#syncFulfilledButton');
+const syncCancelledButton = document.querySelector('#syncCancelledButton');
+const pullTrackingButton = document.querySelector('#pullTrackingButton');
 const internationalExportButton = document.querySelector('#internationalExportButton');
 const drawer = document.querySelector('#drawer');
 const drawerClose = document.querySelector('#drawerClose');
 const drawerTitle = document.querySelector('#drawerTitle');
 const drawerBody = document.querySelector('#drawerBody');
 
-let currentQueue = 'needs_shipping';
+let currentQueue = 'needs_packing';
 let currentOrders = [];
 const rateCache = new Map();
 
@@ -33,6 +36,67 @@ syncButton.addEventListener('click', async () => {
   } finally {
     syncButton.disabled = false;
     syncButton.textContent = 'Sync Wix';
+  }
+});
+
+syncFulfilledButton.addEventListener('click', async () => {
+  syncFulfilledButton.disabled = true;
+  syncFulfilledButton.textContent = 'Checking Wix...';
+  try {
+    const result = await postJson('/api/sync/fulfilled-orders', {});
+    if (result.skipped) {
+      ordersStatusText.textContent = `Sync skipped: ${result.reason}`;
+    } else {
+      ordersStatusText.textContent = `Fulfilled sync done — ${result.pulled} orders pulled from Wix, ${result.persisted} updated`;
+    }
+    await loadDashboard();
+  } catch (error) {
+    ordersStatusText.textContent = `Sync error: ${error.message}`;
+  } finally {
+    syncFulfilledButton.disabled = false;
+    syncFulfilledButton.textContent = 'Sync Fulfilled';
+  }
+});
+
+syncCancelledButton.addEventListener('click', async () => {
+  syncCancelledButton.disabled = true;
+  syncCancelledButton.textContent = 'Checking Wix...';
+  try {
+    const result = await postJson('/api/sync/cancelled-orders', {});
+    if (result.skipped) {
+      ordersStatusText.textContent = `Sync skipped: ${result.reason}`;
+    } else {
+      ordersStatusText.textContent = `Cancelled sync done — ${result.pulled} orders pulled, ${result.persisted} updated`;
+    }
+    await loadDashboard();
+  } catch (error) {
+    ordersStatusText.textContent = `Sync error: ${error.message}`;
+  } finally {
+    syncCancelledButton.disabled = false;
+    syncCancelledButton.textContent = 'Sync Cancelled';
+  }
+});
+
+pullTrackingButton.addEventListener('click', async () => {
+  pullTrackingButton.disabled = true;
+  pullTrackingButton.textContent = 'Pulling...';
+  try {
+    const result = await postJson('/api/tracking/sync', {});
+    const tracking = result.tracking || {};
+    const polled = tracking.lastPolled ?? 0;
+    const updated = tracking.lastUpdated ?? 0;
+    const events = tracking.lastEvents ?? 0;
+    if (tracking.skipped) {
+      ordersStatusText.textContent = `Tracking skipped: ${tracking.reason || 'disabled'}`;
+    } else {
+      ordersStatusText.textContent = `Tracking done — ${polled} checked, ${updated} updated, ${events} new events`;
+    }
+    await loadDashboard();
+  } catch (error) {
+    ordersStatusText.textContent = `Tracking error: ${error.message}`;
+  } finally {
+    pullTrackingButton.disabled = false;
+    pullTrackingButton.textContent = 'Pull Tracking';
   }
 });
 
@@ -91,7 +155,15 @@ async function runAction(button, order) {
       });
     }
     if (button.dataset.action === 'sync-wix') {
-      await postJson(`/api/orders/${encodeURIComponent(order.id)}/sync-wix-fulfillment`, {});
+      const refreshFromWix = window.confirm(
+        'Check Wix first? If this order is already fulfilled on Wix, this will update the local order and skip calling Wix again.'
+      );
+      const result = await postJson(`/api/orders/${encodeURIComponent(order.id)}/sync-wix-fulfillment`, {
+        refreshFromWix
+      });
+      if (result.skipped && result.reason === 'already-fulfilled-on-wix') {
+        ordersStatusText.textContent = 'Updated from Wix: order is already fulfilled, so Wix was not called again.';
+      }
     }
     if (button.dataset.action === 'label') {
       window.open(order.shipment_label_url, '_blank', 'noopener');
@@ -122,6 +194,7 @@ async function openDrawer(orderId) {
   drawerBody.innerHTML = renderDrawer(detail);
   drawer.classList.add('open');
   drawer.setAttribute('aria-hidden', 'false');
+  setupDrawerListeners(detail);
 }
 
 function closeDrawer() {
@@ -148,15 +221,12 @@ async function postJson(url, body) {
 }
 
 function renderSummary(summary, sync) {
+  document.querySelector('#needsPackingCount').textContent = summary.needsPacking || 0;
   document.querySelector('#needsBookingCount').textContent = summary.needsBooking || 0;
-  document.querySelector('#bookedTodayCount').textContent = summary.bookedToday || 0;
-  document.querySelector('#failedCount').textContent = summary.failed || 0;
-  document.querySelector('#wixFailedCount').textContent = summary.wixSyncFailed || 0;
-  document.querySelector('#lastSyncText').textContent = sync.lastFinishedAt
-    ? `${formatDate(sync.lastFinishedAt)} (${sync.lastPersisted || 0})`
-    : sync.running
-      ? 'Running'
-      : 'Not run';
+  document.querySelector('#readyPickupCount').textContent = summary.readyForPickup || 0;
+  document.querySelector('#inTransitCount').textContent = summary.inTransit || 0;
+  document.querySelector('#needsCallCount').textContent = summary.needsCall || 0;
+  document.querySelector('#completedCount').textContent = summary.completed || 0;
 }
 
 function renderOrderRow(order) {
@@ -266,7 +336,7 @@ function renderShipmentCell(order, awb) {
   }
   return `
     <div class="shipmentBox">
-      <span class="pill booked">Booked</span>
+      <span class="pill booked">${escapeHtml(status)}</span>
       <strong>${escapeHtml(awb)}</strong>
       <span class="subtle">${escapeHtml([order.shipment_service_mode, order.shipment_service_code].filter(Boolean).join(' · '))}</span>
       <span class="subtle">${escapeHtml(formatDate(order.shipment_booked_at))}</span>
@@ -289,6 +359,47 @@ function renderActions(order) {
   const wixFailed = order.wix_fulfillment_status === 'failed';
   const needsWixSync = awb && order.wix_fulfillment_status !== 'synced' && order.wix_fulfillment_status !== 'pending';
 
+  const packStatus = order.pick_pack_tasks?.[0]?.status || 'open';
+
+  // Packing Actions
+  if (packStatus !== 'packed' && !awb && !isInternational) {
+    return `
+      <div class="buttonStack">
+        <button type="button" class="pack-action">Verify & Pack</button>
+      </div>
+    `;
+  }
+
+  // Booking Actions
+  if (packStatus === 'packed' && !awb && !isInternational) {
+    return `
+      <div class="buttonStack">
+        <button type="button" data-action="book" data-shipping-mode="E">${order.shipment_status === 'failed' ? 'Retry Express' : 'Book Express'}</button>
+        <button type="button" class="secondary" data-action="book" data-shipping-mode="S">Book Surface</button>
+      </div>
+    `;
+  }
+
+  // International Actions
+  if (isInternational && !awb) {
+    return `
+      <div class="buttonStack">
+        <button type="button" data-action="international-export">Download Excel</button>
+        <button type="button" class="secondary" data-action="book" data-international-service="Deferred Express">Mark Pending</button>
+      </div>
+    `;
+  }
+
+  // Call Actions
+  if (order.shipment_status === 'delivered' && !isBuyerCallComplete(order.buyer_call_status)) {
+    return `
+      <div class="buttonStack">
+        <button type="button" class="call-action">Call Buyer</button>
+      </div>
+    `;
+  }
+
+  // General Post-Booking Actions
   if (awb) {
     return `
       <div class="buttonStack">
@@ -303,21 +414,7 @@ function renderActions(order) {
     `;
   }
 
-  if (isInternational) {
-    return `
-      <div class="buttonStack">
-        <button type="button" data-action="international-export">Download Excel</button>
-        <button type="button" class="secondary" data-action="book" data-international-service="Deferred Express">Mark Pending</button>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="buttonStack">
-      <button type="button" data-action="book" data-shipping-mode="E">${order.shipment_status === 'failed' ? 'Retry Express' : 'Book Express'}</button>
-      <button type="button" class="secondary" data-action="book" data-shipping-mode="S">Book Surface</button>
-    </div>
-  `;
+  return `<span class="subtle">No actions</span>`;
 }
 
 function renderDrawer({ order, shipment, attempts }) {
@@ -325,7 +422,23 @@ function renderDrawer({ order, shipment, attempts }) {
   const destination = raw?.shippingInfo?.logistics?.shippingDestination || {};
   const address = destination.address || {};
   const contact = destination.contactDetails || {};
+
+  const packStatus = order.pick_pack_tasks?.[0]?.status || 'open';
+  const hasAwb = Boolean(order.shipment_waybill);
+  const country = address.country || 'IN';
+  const isInternational = country !== 'IN';
+
+  const isDelivered = order.shipment_status === 'delivered';
+  const isCancelled = order.status === 'CANCELED';
+  const isWixFulfilled = order.fulfillment_status === 'FULFILLED';
+  const canMarkFulfilled = !hasAwb && !isWixFulfilled && !isCancelled;
+
   return `
+    <div class="drawerActions" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+      <button type="button" id="btnRefreshWix" class="secondary">↻ Refresh from Wix</button>
+      ${canMarkFulfilled ? `<button type="button" id="btnMarkFulfilled" class="secondary">✓ Mark as Fulfilled</button>` : ''}
+    </div>
+
     <section class="detailGrid">
       <div>
         <h3>Customer</h3>
@@ -340,31 +453,262 @@ function renderDrawer({ order, shipment, attempts }) {
       </div>
       <div>
         <h3>Shipment</h3>
-        <p>Status: ${escapeHtml(order.shipment_status || 'not booked')}</p>
-        <p>AWB: ${escapeHtml(order.shipment_waybill || '')}</p>
-        <p>Service: ${escapeHtml(order.shipment_service_mode || order.shipment_service_code || '')}</p>
-        <p>Label: ${shipment?.label_url ? `<a href="${escapeHtml(shipment.label_url)}" target="_blank" rel="noopener">Open label</a>` : escapeHtml(shipment?.label_error || 'Unavailable')}</p>
+        <p>Status: <span class="pill">${escapeHtml(order.shipment_status || 'not booked')}</span></p>
+        <p>AWB: <strong>${escapeHtml(order.shipment_waybill || 'N/A')}</strong></p>
+        <p>Service: ${escapeHtml(order.shipment_service_mode || order.shipment_service_code || 'N/A')}</p>
+        <p>Label: ${shipmentLabelUrl(shipment) ? `<a href="${escapeHtml(shipmentLabelUrl(shipment))}" target="_blank" rel="noopener">Open label</a>` : escapeHtml(shipmentLabelError(shipment) || 'Unavailable')}</p>
       </div>
       <div>
-        <h3>Wix sync</h3>
-        <p>Status: ${escapeHtml(order.wix_fulfillment_status || '')}</p>
-        <p>Fulfillment ID: ${escapeHtml(order.wix_fulfillment_id || '')}</p>
-        <p>${escapeHtml(order.wix_fulfillment_error || '')}</p>
+        <h3>Fulfillment & Calls</h3>
+        <p>Wix Status: <span class="pill">${escapeHtml(order.wix_fulfillment_status || 'waiting')}</span></p>
+        <p>Call Status: <span class="pill ${isBuyerCallComplete(order.buyer_call_status) ? 'booked' : 'pending'}">${escapeHtml(formatBuyerCallStatus(order.buyer_call_status))}</span></p>
+        ${order.buyer_called_at ? `<p class="subtle">Called: ${escapeHtml(formatDate(order.buyer_called_at))}</p>` : ''}
+        ${order.buyer_call_notes ? `<p class="subtle">Notes: "${escapeHtml(order.buyer_call_notes)}"</p>` : ''}
       </div>
     </section>
+
+    <!-- 1. Packing Section -->
+    ${packStatus !== 'packed' && !hasAwb && !isInternational ? `
+      <section>
+        <h3>Packing Verification Checklist</h3>
+        <p class="subtle" style="margin-bottom: 12px;">Confirm all items are picked and present before packing:</p>
+        <ul class="itemList">
+          ${(raw.lineItems || []).map((item, idx) => `
+            <li>
+              <label class="pack-check" id="lbl_chk_${idx}">
+                <input type="checkbox" class="pack-item-checkbox" data-index="${idx}" />
+                <span>${escapeHtml(item?.productName?.original || item?.name || 'Item')} x${escapeHtml(item?.quantity || 1)}</span>
+              </label>
+              <span class="subtle">${escapeHtml(item?.physicalProperties?.sku || 'No SKU')}</span>
+            </li>
+          `).join('')}
+        </ul>
+        <button type="button" id="btnMarkPacked" class="btn-pack-all" disabled>Complete Packing & Move to Booking</button>
+      </section>
+    ` : ''}
+
+    <!-- 2. Manual Shipment Status Section -->
+    ${hasAwb && shipment ? `
+      <section class="simulation-widget">
+        <h3>Manual Shipment Status</h3>
+        <div class="call-log-form">
+          <div>
+            <label for="manualShipmentStatus">Shipment status</label>
+            <select id="manualShipmentStatus">
+              ${renderShipmentStatusOptions(order.shipment_status || shipment.status)}
+            </select>
+          </div>
+          <button type="button" id="btnSaveShipmentStatus" class="secondary" style="width:100%;">Update Shipment Status</button>
+        </div>
+        <div style="margin-top:12px;">
+          <button type="button" id="btnRefreshTracking" class="secondary" style="width:100%;">↻ Refresh from Delhivery now</button>
+          <p id="trackingRefreshStatus" class="subtle" style="margin-top:6px;"></p>
+        </div>
+      </section>
+    ` : ''}
+
+    <!-- 3. Buyer Call Form Section -->
+    ${isDelivered && !isBuyerCallComplete(order.buyer_call_status) ? `
+      <section>
+        <h3>Buyer Verification Call Log</h3>
+        <form class="call-log-form" onsubmit="event.preventDefault();">
+          <div>
+            <label for="callStatusSelect">Call Outcome</label>
+            <select id="callStatusSelect">
+              <option value="answered_confirmed">Answered - Confirmed Delivery</option>
+              <option value="no_answer">Busy / No Answer (Retry Later)</option>
+              <option value="wrong_number">Wrong Phone Number</option>
+              <option value="rejected">Rejected / Returning Package</option>
+            </select>
+          </div>
+          <div>
+            <label for="callNotesText">Call Notes / Customer Feedback</label>
+            <textarea id="callNotesText" placeholder="Enter details about delivery status or buyer feedback..."></textarea>
+          </div>
+          <button type="button" id="btnSubmitCall" style="width: 100%;">Save Call Details & Finalize</button>
+        </form>
+      </section>
+    ` : ''}
+
     <section>
-      <h3>Items</h3>
+      <h3>Items Ordered</h3>
       <ul class="itemList">${(raw.lineItems || []).map(renderDrawerItem).join('')}</ul>
     </section>
     <section>
-      <h3>Latest carrier response</h3>
+      <h3>Latest Carrier Response</h3>
       <pre>${escapeHtml(JSON.stringify(shipment?.carrier_response || shipment?.error || {}, null, 2))}</pre>
     </section>
     <section>
-      <h3>Attempts</h3>
-      <div class="attempts">${attempts.length ? attempts.map(renderAttempt).join('') : '<p class="subtle">No attempts recorded.</p>'}</div>
+      <h3>Fulfillment Action History</h3>
+      <div class="attempts">${attempts.length ? attempts.map(renderAttempt).join('') : '<p class="subtle">No actions logged yet.</p>'}</div>
     </section>
   `;
+}
+
+function setupDrawerListeners(detail) {
+  const { order, shipment } = detail;
+
+  // 1. Packing Checklist logic
+  const checkBoxes = drawer.querySelectorAll('.pack-item-checkbox');
+  const btnMarkPacked = drawer.querySelector('#btnMarkPacked');
+  if (checkBoxes.length && btnMarkPacked) {
+    checkBoxes.forEach(cb => {
+      cb.addEventListener('change', () => {
+        const label = drawer.querySelector(`#lbl_chk_${cb.dataset.index}`);
+        if (label) label.classList.toggle('checked', cb.checked);
+
+        const allChecked = Array.from(checkBoxes).every(c => c.checked);
+        btnMarkPacked.disabled = !allChecked;
+      });
+    });
+
+    btnMarkPacked.addEventListener('click', async () => {
+      btnMarkPacked.disabled = true;
+      btnMarkPacked.textContent = 'Packing...';
+      try {
+        await postJson(`/api/orders/${encodeURIComponent(order.id)}/pack`, {});
+        closeDrawer();
+        await loadDashboard();
+      } catch (error) {
+        btnMarkPacked.textContent = 'Error';
+        alert(error.message);
+        btnMarkPacked.disabled = false;
+      }
+    });
+  }
+
+  // 2. Manual shipment status update
+  const btnSaveShipmentStatus = drawer.querySelector('#btnSaveShipmentStatus');
+  const manualShipmentStatus = drawer.querySelector('#manualShipmentStatus');
+  if (btnSaveShipmentStatus && manualShipmentStatus && shipment) {
+    btnSaveShipmentStatus.addEventListener('click', async () => {
+      const status = manualShipmentStatus.value;
+      if (!confirm(`Update shipment status to "${formatShipmentStatus(status)}"?`)) return;
+      btnSaveShipmentStatus.disabled = true;
+      btnSaveShipmentStatus.textContent = 'Updating...';
+      try {
+        await postJson(`/api/shipments/${encodeURIComponent(shipment.id)}/status`, {
+          status
+        });
+        const fresh = await fetchOrderDetail(order.id);
+        drawerTitle.textContent = `Order ${fresh.order.order_number || fresh.order.wix_order_id}`;
+        drawerBody.innerHTML = renderDrawer(fresh);
+        setupDrawerListeners(fresh);
+        await loadDashboard();
+      } catch (error) {
+        btnSaveShipmentStatus.textContent = 'Update Shipment Status';
+        btnSaveShipmentStatus.disabled = false;
+        alert(error.message);
+      }
+    });
+  }
+
+  // Compatibility for older quick status buttons if present in cached markup.
+  const simButtons = drawer.querySelectorAll('.btnSimStatus');
+  if (simButtons.length && shipment) {
+    simButtons.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await postJson(`/api/shipments/${encodeURIComponent(shipment.id)}/status`, {
+          status: btn.dataset.status
+        });
+        closeDrawer();
+        await loadDashboard();
+      });
+    });
+  }
+
+  // 3. Buyer Call Form submission logic
+  const btnSubmitCall = drawer.querySelector('#btnSubmitCall');
+  const callStatusSelect = drawer.querySelector('#callStatusSelect');
+  const callNotesText = drawer.querySelector('#callNotesText');
+  if (btnSubmitCall && callStatusSelect) {
+    btnSubmitCall.addEventListener('click', async () => {
+      btnSubmitCall.disabled = true;
+      btnSubmitCall.textContent = 'Submitting...';
+      try {
+        await postJson(`/api/orders/${encodeURIComponent(order.id)}/call-buyer`, {
+          callStatus: callStatusSelect.value,
+          notes: callNotesText.value
+        });
+        closeDrawer();
+        await loadDashboard();
+      } catch (error) {
+        btnSubmitCall.textContent = 'Error';
+        btnSubmitCall.disabled = false;
+        alert(error.message);
+      }
+    });
+  }
+
+  // 4. Per-order Refresh Tracking button
+  const btnRefreshTracking = drawer.querySelector('#btnRefreshTracking');
+  const trackingRefreshStatus = drawer.querySelector('#trackingRefreshStatus');
+  if (btnRefreshTracking) {
+    btnRefreshTracking.addEventListener('click', async () => {
+      btnRefreshTracking.disabled = true;
+      btnRefreshTracking.textContent = '↻ Pulling from Delhivery...';
+      if (trackingRefreshStatus) trackingRefreshStatus.textContent = '';
+      try {
+        const result = await postJson('/api/tracking/sync', {});
+        const tracking = result.tracking || {};
+        if (trackingRefreshStatus) {
+          trackingRefreshStatus.textContent = tracking.skipped
+            ? `Skipped: ${tracking.reason || 'disabled'}`
+            : `Done — ${tracking.lastPolled ?? 0} checked, ${tracking.lastUpdated ?? 0} updated, ${tracking.lastEvents ?? 0} new events`;
+        }
+        // Reload the drawer with fresh data
+        const fresh = await fetchOrderDetail(order.id);
+        drawerTitle.textContent = `Order ${fresh.order.order_number || fresh.order.wix_order_id}`;
+        drawerBody.innerHTML = renderDrawer(fresh);
+        setupDrawerListeners(fresh);
+        await loadDashboard();
+      } catch (error) {
+        if (trackingRefreshStatus) trackingRefreshStatus.textContent = `Error: ${error.message}`;
+        btnRefreshTracking.disabled = false;
+        btnRefreshTracking.textContent = '↻ Refresh from Delhivery now';
+      }
+    });
+  }
+
+  // 5. Refresh from Wix button
+  const btnRefreshWix = drawer.querySelector('#btnRefreshWix');
+  if (btnRefreshWix) {
+    btnRefreshWix.addEventListener('click', async () => {
+      btnRefreshWix.disabled = true;
+      btnRefreshWix.textContent = '↻ Refreshing from Wix...';
+      try {
+        await postJson(`/api/orders/${encodeURIComponent(order.id)}/refresh-wix`, {});
+        const fresh = await fetchOrderDetail(order.id);
+        drawerTitle.textContent = `Order ${fresh.order.order_number || fresh.order.wix_order_id}`;
+        drawerBody.innerHTML = renderDrawer(fresh);
+        setupDrawerListeners(fresh);
+        await loadDashboard();
+      } catch (error) {
+        btnRefreshWix.disabled = false;
+        btnRefreshWix.textContent = '↻ Refresh from Wix';
+        alert(`Wix refresh failed: ${error.message}`);
+      }
+    });
+  }
+
+  // 6. Mark as Fulfilled button
+  const btnMarkFulfilled = drawer.querySelector('#btnMarkFulfilled');
+  if (btnMarkFulfilled) {
+    btnMarkFulfilled.addEventListener('click', async () => {
+      if (!confirm('Mark this order as fulfilled? It will be removed from the packing queue.')) return;
+      btnMarkFulfilled.disabled = true;
+      btnMarkFulfilled.textContent = 'Marking...';
+      try {
+        await postJson(`/api/orders/${encodeURIComponent(order.id)}/mark-fulfilled`, {});
+        closeDrawer();
+        await loadDashboard();
+      } catch (error) {
+        btnMarkFulfilled.disabled = false;
+        btnMarkFulfilled.textContent = '✓ Mark as Fulfilled';
+        alert(`Failed: ${error.message}`);
+      }
+    });
+  }
 }
 
 function renderDrawerItem(item) {
@@ -372,14 +716,70 @@ function renderDrawerItem(item) {
   return `<li>${escapeHtml(item?.productName?.original || item?.name || 'Item')} x${escapeHtml(item?.quantity || 1)}${escapeHtml(sku)}</li>`;
 }
 
+function renderShipmentStatusOptions(currentStatus) {
+  const statuses = [
+    ['booked', 'Booked / Ready for pickup'],
+    ['picked-up', 'Picked up'],
+    ['dispatched', 'Dispatched'],
+    ['in-transit', 'In transit'],
+    ['out-for-delivery', 'Out for delivery'],
+    ['delivered', 'Delivered'],
+    ['rto', 'RTO'],
+    ['failed', 'Failed']
+  ];
+  const current = String(currentStatus || '').trim().toLowerCase().replace(/_/g, '-');
+  return statuses
+    .map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === current ? 'selected' : ''}>${escapeHtml(label)}</option>`)
+    .join('');
+}
+
+function formatShipmentStatus(status) {
+  const labels = {
+    booked: 'Booked / Ready for pickup',
+    'picked-up': 'Picked up',
+    dispatched: 'Dispatched',
+    'in-transit': 'In transit',
+    'out-for-delivery': 'Out for delivery',
+    delivered: 'Delivered',
+    rto: 'RTO',
+    failed: 'Failed'
+  };
+  return labels[status] || status;
+}
+
 function renderAttempt(attempt) {
   return `
-    <div class="attempt">
+    <div class="attempt ${attempt.success ? 'success' : 'failed'}">
       <strong>#${escapeHtml(attempt.attempt_number)} ${attempt.success ? 'Success' : 'Failed'}</strong>
       <span>${escapeHtml(formatDate(attempt.created_at))}</span>
-      <span>${escapeHtml(attempt.error || '')}</span>
+      <span class="subtle">${escapeHtml(attempt.error || '')}</span>
     </div>
   `;
+}
+
+function isBuyerCallComplete(status) {
+  return ['answered_confirmed', 'completed'].includes(status || '');
+}
+
+function formatBuyerCallStatus(status) {
+  const labels = {
+    answered_confirmed: 'answered confirmed',
+    completed: 'answered confirmed',
+    no_answer: 'no answer',
+    retry: 'no answer',
+    wrong_number: 'wrong number',
+    rejected: 'rejected',
+    pending: 'pending'
+  };
+  return labels[status] || status || 'pending';
+}
+
+function shipmentLabelUrl(shipment) {
+  return shipment?.label_url || shipment?.labelUrl || '';
+}
+
+function shipmentLabelError(shipment) {
+  return shipment?.label_error || shipment?.labelError || '';
 }
 
 function contactName(contact = {}) {

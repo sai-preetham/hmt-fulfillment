@@ -82,9 +82,29 @@ test('does not mark order shipment as booked until an awb exists', () => {
   assert.equal(summary.shipment_updated_at, '2026-06-04T10:01:00.000Z');
 });
 
-test('lists Delhivery and Shree Maruti courier adapters', () => {
+test('preserves booked timestamp when later shipment updates still have an awb', () => {
+  const summary = buildOrderShipmentSummary(
+    {
+      status: 'in-transit',
+      waybill: 'awb-1',
+      courier_code: 'delhivery',
+      courier_service_code: 'surface',
+      service_mode: 'Surface',
+      updated_at: '2026-06-04T10:30:00.000Z'
+    },
+    '2026-06-04T10:31:00.000Z'
+  );
+
+  assert.equal(Object.hasOwn(summary, 'shipment_booked_at'), false);
+  assert.equal(summary.shipment_status, 'in-transit');
+  assert.equal(summary.shipment_waybill, 'awb-1');
+});
+
+test('lists configured courier adapters', () => {
   assert.equal(getCourierAdapter('delhivery').code, 'delhivery');
+  assert.equal(getCourierAdapter('shiprocket').code, 'shiprocket');
   assert.equal(getCourierAdapter('shree_maruti').code, 'shree_maruti');
+  assert.equal(listCourierServices().some(courier => courier.code === 'shiprocket'), true);
   assert.equal(listCourierServices().some(courier => courier.code === 'shree_maruti'), true);
 });
 

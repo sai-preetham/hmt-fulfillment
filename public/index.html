@@ -16,41 +16,53 @@
         <div class="topActions">
           <button id="internationalExportButton" type="button" class="secondary">International Excel</button>
           <button id="syncButton" type="button" class="secondary">Sync Wix</button>
+          <button id="syncFulfilledButton" type="button" class="secondary">Sync Fulfilled</button>
+          <button id="syncCancelledButton" type="button" class="secondary">Sync Cancelled</button>
+          <button id="pullTrackingButton" type="button" class="secondary">Pull Tracking</button>
           <button id="refreshButton" type="button">Refresh</button>
         </div>
       </header>
 
       <section class="metrics" aria-label="Shipping summary">
         <div class="metric">
+          <span>Needs packing</span>
+          <strong id="needsPackingCount">0</strong>
+        </div>
+        <div class="metric">
           <span>Needs booking</span>
           <strong id="needsBookingCount">0</strong>
         </div>
         <div class="metric">
-          <span>Booked today</span>
-          <strong id="bookedTodayCount">0</strong>
+          <span>Ready for pickup</span>
+          <strong id="readyPickupCount">0</strong>
         </div>
         <div class="metric">
-          <span>Failed</span>
-          <strong id="failedCount">0</strong>
+          <span>In transit</span>
+          <strong id="inTransitCount">0</strong>
         </div>
         <div class="metric">
-          <span>Wix sync failed</span>
-          <strong id="wixFailedCount">0</strong>
+          <span>Needs call</span>
+          <strong id="needsCallCount">0</strong>
         </div>
-        <div class="metric wide">
-          <span>Last Wix sync</span>
-          <strong id="lastSyncText">Not run</strong>
+        <div class="metric">
+          <span>Completed</span>
+          <strong id="completedCount">0</strong>
         </div>
       </section>
 
       <section class="panel">
         <div class="queueHeader">
           <div class="tabs" role="tablist" aria-label="Queue filters">
-            <button type="button" class="tab active" data-queue="needs_shipping">Needs booking</button>
-            <button type="button" class="tab" data-queue="booked">Booked</button>
-            <button type="button" class="tab" data-queue="wix_update_failed">Wix update failed</button>
+            <button type="button" class="tab active" data-queue="needs_packing">Needs packing</button>
+            <button type="button" class="tab" data-queue="needs_booking">Needs booking</button>
+            <button type="button" class="tab" data-queue="ready_for_pickup">Ready for pickup</button>
+            <button type="button" class="tab" data-queue="in_transit">In transit</button>
+            <button type="button" class="tab" data-queue="needs_call">Needs call</button>
+            <button type="button" class="tab" data-queue="completed">Completed</button>
+            <button type="button" class="tab" data-queue="wix_update_failed">Wix failed</button>
             <button type="button" class="tab" data-queue="failed">Failed booking</button>
             <button type="button" class="tab" data-queue="international_pending">International pending</button>
+            <button type="button" class="tab" data-queue="cancelled">Cancelled</button>
             <button type="button" class="tab" data-queue="all_recent">All recent</button>
           </div>
           <span id="ordersStatusText">Loading...</span>

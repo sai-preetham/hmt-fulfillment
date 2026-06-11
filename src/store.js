@@ -18,22 +18,20 @@ export async function listOrders() {
   return listDashboardOrders({ queue: 'all_recent', limit: 100 });
 }
 
-export async function listDashboardOrders({ queue = 'needs_shipping', limit = 100 } = {}) {
+export async function listDashboardOrders({ queue = 'needs_packing', limit = 100 } = {}) {
   const supabase = getSupabaseClient();
   if (!supabase) return [];
-  const rows = await supabase.select(
-    'orders',
-    `${orderSelect()}&order=source_created_at.desc&limit=${Math.min(Math.max(Number(limit) || 100, 1), 200)}`
-  );
-  return rows.filter(order => matchesDashboardQueue(order, queue));
+  const querySuffix = `&order=source_created_at.desc&limit=${Math.min(Math.max(Number(limit) || 100, 1), 200)}`;
+  const rows = await selectOrdersWithSchemaFallback(supabase, querySuffix);
+  return rows.filter(order => matchesDashboardQueue(order, normalizeDashboardQueue(queue)));
 }
 
 export async function listInternationalExportOrders({ limit = 500 } = {}) {
   const supabase = getSupabaseClient();
   if (!supabase) return [];
-  const rows = await supabase.select(
-    'orders',
-    `${orderSelect()}&order=source_created_at.desc&limit=${Math.min(Math.max(Number(limit) || 500, 1), 1000)}`
+  const rows = await selectOrdersWithSchemaFallback(
+    supabase,
+    `&order=source_created_at.desc&limit=${Math.min(Math.max(Number(limit) || 500, 1), 1000)}`
   );
   return rows.filter(isExportableInternationalOrder);
 }
@@ -84,7 +82,7 @@ export async function upsertShipment(record) {
 export async function findOrderById(id) {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
-  const rows = await supabase.select('orders', `id=eq.${encodeURIComponent(id)}&${orderSelect()}`);
+  const rows = await selectOrdersWithSchemaFallback(supabase, `&id=eq.${encodeURIComponent(id)}`);
   return rows[0] || null;
 }
 
@@ -161,6 +159,166 @@ export async function upsertWixOrders(orders) {
     results.push(await upsertWixOrder(order));
   }
   return results.filter(Boolean);
+}
+
+export async function packOrder(orderId) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+
+  const existing = await supabase.select('pick_pack_tasks', `order_id=eq.${encodeURIComponent(orderId)}&limit=1`);
+  const now = new Date().toISOString();
+
+  if (existing && existing.length > 0) {
+    return supabase.patch('pick_pack_tasks', `id=eq.${existing[0].id}`, {
+      status: 'packed',
+      packed_at: now,
+      updated_at: now
+    });
+  } else {
+    return supabase.insert('pick_pack_tasks', {
+      order_id: orderId,
+      status: 'packed',
+      packed_at: now
+    });
+  }
+}
+
+export async function logBuyerCall(orderId, callStatus, notes) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+
+  const now = new Date().toISOString();
+  const normalizedStatus = normalizeBuyerCallStatus(callStatus);
+
+  const updatedOrder = await supabase.patch('orders', `id=eq.${encodeURIComponent(orderId)}`, {
+    buyer_call_status: normalizedStatus,
+    buyer_call_notes: notes || null,
+    buyer_called_at: now,
+    updated_at: now
+  });
+
+  await supabase.insert('buyer_calls', {
+    order_id: orderId,
+    call_status: normalizedStatus,
+    notes: notes || null,
+    called_at: now
+  });
+
+  return updatedOrder;
+}
+
+/**
+ * Locally mark an order as fulfilled so it drops out of the packing/booking queues.
+ * Does not call Wix — use syncBookedShipmentToWix for that.
+ *
+ * @param {string} orderId  DB order UUID
+ */
+export async function markOrderFulfilled(orderId) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+  return supabase.patch('orders', `id=eq.${encodeURIComponent(orderId)}`, {
+    fulfillment_status: 'FULFILLED',
+    updated_at: new Date().toISOString()
+  });
+}
+
+export async function updateShipmentStatus(shipmentId, status) {
+
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+
+  const now = new Date().toISOString();
+
+  const shipment = await supabase.patch('shipments', `id=eq.${encodeURIComponent(shipmentId)}`, {
+    status: status,
+    updated_at: now
+  });
+
+  if (shipment) {
+    await syncOrderShipmentSummary(supabase, shipment);
+  }
+
+  return shipment;
+}
+
+/**
+ * Return all shipments that have a waybill and are not in a terminal state.
+ * Used by the tracking poller.
+ *
+ * @returns {Promise<Array<{id, waybill, order_id, status, courier_code}>>}
+ */
+export async function listActiveShipmentWaybills() {
+  const supabase = getSupabaseClient();
+  if (!supabase) return [];
+  // Fetch booked/in-transit shipments that have a real AWB
+  const rows = await supabase.select(
+    'shipments',
+    'select=id,waybill,order_id,status,courier_code' +
+      '&waybill=not.is.null' +
+      '&status=not.in.(delivered,rto,cancelled,failed)' +
+      '&order=updated_at.asc' +
+      '&limit=500'
+  );
+  // Filter out empty-string waybills (Supabase `not.is.null` won't catch those)
+  return (rows || []).filter(r => r.waybill && r.waybill.trim());
+}
+
+/**
+ * Persist new tracking scan events for a shipment.
+ * Duplicates (same shipment_id + occurred_at + event_status) are silently
+ * ignored via the unique index `idx_shipment_events_dedup`.
+ *
+ * @param {string} shipmentId
+ * @param {Array} events  Normalised event objects from `extractTrackingEvents()`
+ * @returns {Promise<number>} Number of new events inserted
+ */
+export async function saveTrackingEvents(shipmentId, events) {
+  const supabase = getSupabaseClient();
+  if (!supabase || !events.length) return 0;
+
+  let inserted = 0;
+  for (const event of events) {
+    try {
+      await supabase.insert('shipment_events', {
+        shipment_id: shipmentId,
+        event_status: event.event_status || null,
+        normalized_status: event.normalized_status || null,
+        carrier_location: event.carrier_location || null,
+        message: event.message || null,
+        occurred_at: event.occurred_at || new Date().toISOString(),
+        raw_event: event.raw_event || {}
+      });
+      inserted += 1;
+    } catch (error) {
+      // Unique-constraint violation means we already have this event — skip
+      if (!isUniqueViolation(error)) throw error;
+    }
+  }
+  return inserted;
+}
+
+/**
+ * Update a shipment's status after a tracking poll and propagate the
+ * summary to the parent order row.
+ *
+ * @param {string} shipmentId
+ * @param {{ status: string, location: string|null, lastEventAt: string }} fields
+ */
+export async function updateShipmentTracking(shipmentId, { status, lastEventAt }) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+
+  const now = new Date().toISOString();
+  const shipment = await supabase.patch('shipments', `id=eq.${encodeURIComponent(shipmentId)}`, {
+    status,
+    updated_at: lastEventAt || now
+  });
+
+  if (shipment) {
+    await syncOrderShipmentSummary(supabase, shipment);
+  }
+
+  return shipment;
 }
 
 async function listSupabaseShipments(supabase) {
@@ -342,25 +500,122 @@ function denormalizeShipment(row) {
 }
 
 function orderSelect() {
+  return orderSelectColumns({ includeBuyerCalls: true });
+}
+
+function orderSelectColumns({ includeBuyerCalls }) {
   return [
     'select=id,wix_order_id,order_number,status,payment_status,fulfillment_status,currency,total_amount,shipping_amount,selected_shipping_title',
     'shipment_status,shipment_waybill,shipment_courier_code,shipment_service_code,shipment_service_mode,shipment_booked_at,shipment_updated_at',
     'shipment_label_url,shipment_label_format,shipment_label_error',
     'wix_fulfillment_status,wix_fulfillment_id,wix_fulfillment_synced_at,wix_fulfillment_error',
-    'source_created_at,source_updated_at,updated_at,raw_order,customers(name,email,phone)'
-  ].join(',');
+    includeBuyerCalls ? 'buyer_call_status,buyer_call_notes,buyer_called_at' : '',
+    'source_created_at,source_updated_at,updated_at,raw_order,customers(name,email,phone)',
+    'pick_pack_tasks(id,status,picked_at,packed_at,notes)'
+  ].filter(Boolean).join(',');
 }
 
-function matchesDashboardQueue(order, queue) {
-  if (queue === 'all_recent') return true;
-  if (queue === 'booked') return order.shipment_status === 'booked';
-  if (queue === 'failed') return order.shipment_status === 'failed';
-  if (queue === 'international_pending') return order.shipment_status === 'pending-international';
-  if (queue === 'wix_update_failed') return order.wix_fulfillment_status === 'failed';
-  return (
+async function selectOrdersWithSchemaFallback(supabase, querySuffix = '') {
+  try {
+    return await supabase.select('orders', `${orderSelectColumns({ includeBuyerCalls: true })}${querySuffix}`);
+  } catch (error) {
+    if (!isMissingBuyerCallSchemaError(error)) throw error;
+    const rows = await supabase.select('orders', `${orderSelectColumns({ includeBuyerCalls: false })}${querySuffix}`);
+    return rows.map(order => ({
+      ...order,
+      buyer_call_status: 'pending',
+      buyer_call_notes: null,
+      buyer_called_at: null
+    }));
+  }
+}
+
+function isMissingBuyerCallSchemaError(error) {
+  return /buyer_call_status|buyer_call_notes|buyer_called_at/.test(error?.message || '');
+}
+
+export function matchesDashboardQueue(order, queue) {
+  const normalizedQueue = normalizeDashboardQueue(queue);
+
+  // Wix uses 'CANCELED' (one L). Never show cancelled orders in any active queue.
+  const isCancelled = order.status === 'CANCELED';
+  if (isCancelled) {
+    return normalizedQueue === 'all_recent' || normalizedQueue === 'cancelled';
+  }
+
+  const isPaidOrApproved =
     ['PAID', 'APPROVED'].includes(order.payment_status) ||
-    ['APPROVED'].includes(order.status)
-  ) && !order.shipment_waybill && !['booked', 'pending-international'].includes(order.shipment_status || '');
+    ['APPROVED'].includes(order.status);
+
+  // An order already marked FULFILLED in Wix (in-person, manual, etc.) is done —
+  // exclude it from packing/booking queues entirely.
+  const isWixFulfilled = order.fulfillment_status === 'FULFILLED';
+
+  const packStatus = getPackStatus(order);
+  const hasAwb = Boolean(order.shipment_waybill);
+  const shipmentStatus = normalizeShipmentStatus(order.shipment_status);
+  const isBooked = shipmentStatus === 'booked';
+  const isDelivered = shipmentStatus === 'delivered';
+  const isTransit = ['in-transit', 'out-for-delivery', 'picked-up', 'dispatched'].includes(shipmentStatus);
+  const buyerCallComplete = ['answered_confirmed', 'completed'].includes(order.buyer_call_status || '');
+
+  if (normalizedQueue === 'all_recent') return true;
+  if (normalizedQueue === 'cancelled') return false;
+  if (normalizedQueue === 'failed') return shipmentStatus === 'failed';
+  if (normalizedQueue === 'wix_update_failed') return order.wix_fulfillment_status === 'failed';
+  if (normalizedQueue === 'international_pending') return shipmentStatus === 'pending-international';
+
+  if (normalizedQueue === 'needs_packing') {
+    return isPaidOrApproved && !hasAwb && !isWixFulfilled && packStatus !== 'packed' && shipmentStatus !== 'pending-international';
+  }
+  if (normalizedQueue === 'needs_booking') {
+    return isPaidOrApproved && !hasAwb && !isWixFulfilled && packStatus === 'packed' && shipmentStatus !== 'pending-international';
+  }
+  if (normalizedQueue === 'ready_for_pickup') {
+    return hasAwb && isBooked && !isTransit && !isDelivered;
+  }
+  if (normalizedQueue === 'in_transit') {
+    return hasAwb && isTransit && !isDelivered;
+  }
+  if (normalizedQueue === 'needs_call') {
+    return isDelivered && !buyerCallComplete;
+  }
+  if (normalizedQueue === 'completed') {
+    return isDelivered && buyerCallComplete;
+  }
+  return false;
+}
+
+function normalizeDashboardQueue(queue) {
+  if (queue === 'needs_shipping') return 'needs_packing';
+  if (queue === 'booked') return 'ready_for_pickup';
+  return queue || 'needs_packing';
+}
+
+function normalizeShipmentStatus(status) {
+  const normalized = String(status || '').trim().toLowerCase().replace(/_/g, '-');
+  if (!normalized) return '';
+  if (normalized.startsWith('rto')) return 'rto';
+  if (normalized.includes('delivered')) return 'delivered';
+  if (normalized.includes('out for delivery') || normalized.includes('out-for-delivery')) return 'out-for-delivery';
+  if (normalized.includes('in transit') || normalized.includes('in-transit') || normalized === 'intransit') return 'in-transit';
+  if (normalized.includes('picked up') || normalized.includes('picked-up') || normalized === 'pickup') return 'picked-up';
+  if (normalized.includes('dispatched')) return 'dispatched';
+  if (normalized.includes('manifested') || normalized === 'booked') return 'booked';
+  if (normalized.includes('failed') || normalized.includes('cancelled') || normalized.includes('canceled')) return 'failed';
+  return normalized;
+}
+
+function normalizeBuyerCallStatus(status) {
+  if (status === 'completed') return 'answered_confirmed';
+  if (status === 'retry') return 'no_answer';
+  return status;
+}
+
+function getPackStatus(order) {
+  const tasks = order.pick_pack_tasks || [];
+  if (tasks.some(task => task.status === 'packed')) return 'packed';
+  return tasks[0]?.status || 'open';
 }
 
 function isExportableInternationalOrder(order) {
@@ -387,4 +642,13 @@ async function readStore() {
 async function writeStore(shipments) {
   await mkdir(dirname(STORE_PATH.pathname), { recursive: true });
   await writeFile(STORE_PATH, JSON.stringify(shipments, null, 2));
+}
+
+/**
+ * Detect a Postgres unique-constraint violation (error code 23505) returned
+ * as an error message from the Supabase REST client.
+ */
+function isUniqueViolation(error) {
+  const msg = String(error?.message || '');
+  return msg.includes('23505') || msg.includes('unique constraint') || msg.includes('duplicate key');
 }

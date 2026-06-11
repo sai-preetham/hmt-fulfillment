@@ -1,8 +1,10 @@
 import { delhiveryAdapter } from './delhivery.js';
 import { shreeMarutiAdapter } from './shreeMaruti.js';
+import { shiprocketAdapter } from './shiprocket.js';
 
 const adapters = new Map([
   [delhiveryAdapter.code, delhiveryAdapter],
+  [shiprocketAdapter.code, shiprocketAdapter],
   [shreeMarutiAdapter.code, shreeMarutiAdapter]
 ]);
 
