@@ -1,6 +1,77 @@
-# Wix to Delhivery Shipment Booker
+# Hold My Throttle Operations CRM
 
-A small Node app that receives Wix eCommerce orders, maps them to Delhivery's package/order creation payload, and books shipments through Delhivery APIs.
+This repository now contains a Next.js internal Operations CRM for Hold My Throttle plus the legacy Wix/Delhivery shipment service.
+
+The CRM manages orders from Wix, Amazon, and manual entry; fulfillment; packing; shipment booking; pickup and delivery tracking; installation follow-up; feedback; reviews; support; tasks; integration errors; and audit history in Supabase.
+
+Detailed deliverables:
+
+- [Operations CRM architecture](docs/OPERATIONS_CRM.md)
+- [Operator test cases](docs/OPERATOR_TEST_CASES.md)
+
+## Run the CRM
+
+```bash
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+The CRM runs with seeded demo data when Supabase env vars are missing. Set these for persistence:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+AUTH_REQUIRED=true
+```
+
+Apply schema:
+
+```bash
+supabase db push
+psql "$SUPABASE_DB_URL" -f supabase/seed.sql
+```
+
+Sync all Wix orders and Wix fulfillment tracking details into Supabase:
+
+```bash
+npm run sync:wix-crm
+```
+
+The sync walks Wix order search cursors, persists every order, and for fulfilled/partially fulfilled orders calls Wix fulfillments to store AWB, courier, and tracking links when present. Use a smaller page size if Wix is slow:
+
+```bash
+WIX_SYNC_PAGE_SIZE=25 npm run sync:wix-crm
+```
+
+## Next.js CRM Routes
+
+- `/` dashboard
+- `/orders`
+- `/orders/[id]`
+- `/packing`
+- `/shipments`
+- `/pickup`
+- `/installation`
+- `/feedback`
+- `/tasks`
+- `/integration-errors`
+- `/settings`
+
+## Legacy Shipment Service
+
+Run the previous Node service with:
+
+```bash
+npm run legacy:dev
+```
+
+It still serves the older shipping dashboard and APIs from `src/server.js`.
+
+## Legacy Service Notes
 
 ## What It Does
 

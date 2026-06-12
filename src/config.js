@@ -1,5 +1,6 @@
 import process from 'node:process';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 loadEnvFile();
 
@@ -47,7 +48,11 @@ export function getConfig() {
       returnState: process.env.DELHIVERY_RETURN_STATE || '',
       returnPincode: process.env.DELHIVERY_RETURN_PINCODE || process.env.DELHIVERY_PICKUP_PINCODE || '',
       returnPhone: process.env.DELHIVERY_RETURN_PHONE || '',
-      labelUrl: process.env.DELHIVERY_LABEL_URL || '',
+      labelUrl:
+        process.env.DELHIVERY_LABEL_URL ||
+        (delhiveryEnv === 'production'
+          ? 'https://track.delhivery.com/api/p/packing_slip'
+          : 'https://staging-express.delhivery.com/api/p/packing_slip'),
       trackingUrlTemplate: process.env.DELHIVERY_TRACKING_URL_TEMPLATE || 'https://www.delhivery.com/track/package/{waybill}',
       trackingApiUrl: 'https://track.delhivery.com/api/v1/packages/json/',
       trackingEnabled: process.env.DELHIVERY_TRACKING_ENABLED === 'true',
@@ -88,7 +93,7 @@ export function getConfig() {
 
 function loadEnvFile() {
   try {
-    const raw = readFileSync(new URL('../.env', import.meta.url), 'utf8');
+    const raw = readFileSync(fileURLToPath(new URL('../.env', import.meta.url)), 'utf8');
     for (const line of raw.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;

@@ -161,6 +161,47 @@ export async function upsertWixOrders(orders) {
   return results.filter(Boolean);
 }
 
+export async function upsertWixFulfillmentTracking(order, fulfillments = []) {
+  const trackedFulfillments = fulfillments.filter(fulfillment => fulfillment?.trackingInfo?.trackingNumber);
+  if (!trackedFulfillments.length) return { persisted: 0 };
+
+  let persisted = 0;
+  for (const fulfillment of trackedFulfillments) {
+    const tracking = fulfillment.trackingInfo || {};
+    const shipment = await upsertShipment({
+      dbOrderId: order.id,
+      orderId: order.wix_order_id,
+      orderNumber: order.order_number,
+      status: inferShipmentStatusFromWixFulfillment(fulfillment),
+      courierCode: inferCourierCodeFromTracking(tracking),
+      waybill: tracking.trackingNumber,
+      shippingMode: tracking.shippingProvider,
+      source: 'wix-fulfillment',
+      requestPayload: {
+        source: 'wix-fulfillment',
+        fulfillment
+      },
+      delhiveryResponse: {
+        source: 'wix',
+        fulfillmentId: fulfillment.id || null,
+        trackingInfo: tracking,
+        createdDate: fulfillment.createdDate || null,
+        updatedDate: fulfillment.updatedDate || null
+      }
+    });
+
+    await updateOrderWixFulfillment(order.id, {
+      status: 'synced_from_wix',
+      fulfillmentId: fulfillment.id || '',
+      syncedAt: new Date().toISOString(),
+      error: null
+    });
+    if (shipment) persisted += 1;
+  }
+
+  return { persisted };
+}
+
 export async function packOrder(orderId) {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
@@ -610,6 +651,24 @@ function normalizeBuyerCallStatus(status) {
   if (status === 'completed') return 'answered_confirmed';
   if (status === 'retry') return 'no_answer';
   return status;
+}
+
+function inferShipmentStatusFromWixFulfillment(fulfillment) {
+  const status = String(fulfillment.status || fulfillment.fulfillmentStatus || '').trim().toLowerCase();
+  if (status.includes('deliver')) return 'delivered';
+  if (status.includes('transit') || status.includes('shipp')) return 'in-transit';
+  if (status.includes('cancel')) return 'cancelled';
+  return fulfillment.trackingInfo?.trackingNumber ? 'booked' : 'pending';
+}
+
+function inferCourierCodeFromTracking(tracking = {}) {
+  const provider = String(tracking.shippingProvider || tracking.carrier || '').toLowerCase();
+  const link = String(tracking.trackingLink || '').toLowerCase();
+  if (provider.includes('fedex') || link.includes('fedex')) return 'fedex';
+  if (provider.includes('maruti') || link.includes('shree')) return 'shree_maruti';
+  if (provider.includes('shiprocket') || link.includes('shiprocket')) return 'shiprocket';
+  if (provider.includes('delhivery') || link.includes('delhivery')) return 'delhivery';
+  return provider.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'wix';
 }
 
 function getPackStatus(order) {

@@ -48,6 +48,29 @@ export async function fetchWixOrder(orderId, config) {
   return body.order;
 }
 
+export async function fetchWixOrderFulfillments(orderId, config) {
+  if (!config.wix.authToken) {
+    throw new Error('WIX_AUTH_TOKEN is required to pull Wix fulfillments.');
+  }
+
+  const controller = createTimeoutController(config);
+  const response = await fetch(
+    `https://www.wixapis.com/ecom/v1/fulfillments/orders/${encodeURIComponent(orderId)}`,
+    {
+      headers: wixHeaders(config),
+      signal: controller.signal
+    }
+  );
+  controller.clear();
+
+  const body = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(`Wix List Fulfillments failed (${response.status}): ${JSON.stringify(body)}`);
+  }
+
+  return body.orderWithFulfillments?.fulfillments || body.fulfillments || [];
+}
+
 export async function searchWixOrders(options = {}, config) {
   if (!config.wix.authToken) {
     throw new Error('WIX_AUTH_TOKEN is required to pull Wix orders.');

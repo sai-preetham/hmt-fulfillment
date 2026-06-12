@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildOrderShipmentSummary, normalizeShipmentRecord, normalizeWixOrder } from '../src/fulfillment.js';
+import { upsertWixFulfillmentTracking } from '../src/store.js';
 import { getCourierAdapter, listCourierServices } from '../src/couriers/index.js';
 
 test('normalizes Wix order into customer, order, items, and payment refs', () => {
@@ -108,6 +109,76 @@ test('lists configured courier adapters', () => {
   assert.equal(listCourierServices().some(courier => courier.code === 'shree_maruti'), true);
 });
 
+test('persists tracking details pulled from Wix fulfillments', async () => {
+  const originalFetch = global.fetch;
+  const requests = [];
+  global.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
+    if (String(url).includes('/rest/v1/shipments?legacy_order_id')) {
+      return jsonResponse([]);
+    }
+    if (String(url).includes('/rest/v1/shipments') && options.method === 'POST') {
+      return jsonResponse([
+        {
+          id: 'shipment-id',
+          order_id: 'order-db-id',
+          legacy_order_id: 'wix-order-id',
+          order_number: '1001',
+          status: 'booked',
+          waybill: 'AWB-WIX-1',
+          courier_code: 'delhivery'
+        }
+      ]);
+    }
+    if (String(url).includes('/rest/v1/shipment_attempts') && (options.method || 'GET') === 'GET') {
+      return jsonResponse([]);
+    }
+    if (String(url).includes('/rest/v1/shipment_attempts') && options.method === 'POST') {
+      return jsonResponse([{ id: 'attempt-id' }]);
+    }
+    if (String(url).includes('/rest/v1/orders') && options.method === 'PATCH') {
+      return jsonResponse([{ id: 'order-db-id', ...requests.at(-1).body }]);
+    }
+    if (String(url).includes('/rest/v1/audit_log') && options.method === 'POST') {
+      return jsonResponse([{ id: 'audit-id' }]);
+    }
+    throw new Error(`Unexpected request ${options.method || 'GET'} ${url}`);
+  };
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role';
+
+  try {
+    const result = await upsertWixFulfillmentTracking(
+      {
+        id: 'order-db-id',
+        wix_order_id: 'wix-order-id',
+        order_number: '1001'
+      },
+      [
+        {
+          id: 'fulfillment-id',
+          createdDate: '2026-06-10T08:09:21.460Z',
+          trackingInfo: {
+            trackingNumber: 'AWB-WIX-1',
+            shippingProvider: 'Express',
+            trackingLink: 'https://www.delhivery.com/track/package/AWB-WIX-1'
+          }
+        }
+      ]
+    );
+
+    const shipmentPost = requests.find(request => request.url.includes('/rest/v1/shipments') && request.method === 'POST');
+    assert.equal(result.persisted, 1);
+    assert.equal(shipmentPost.body.waybill, 'AWB-WIX-1');
+    assert.equal(shipmentPost.body.courier_code, 'delhivery');
+    assert.equal(shipmentPost.body.carrier_response.trackingInfo.trackingLink, 'https://www.delhivery.com/track/package/AWB-WIX-1');
+  } finally {
+    global.fetch = originalFetch;
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  }
+});
+
 function sampleOrder() {
   return {
     id: 'order-id',
@@ -162,5 +233,13 @@ function sampleOrder() {
         physicalProperties: { sku: 'SKU-1', weight: 0.4 }
       }
     ]
+  };
+}
+
+function jsonResponse(payload, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(payload)
   };
 }
