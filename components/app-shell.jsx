@@ -5,6 +5,7 @@ import {
   CheckSquare,
   ClipboardList,
   Gauge,
+  LogOut,
   MessageCircle,
   PackageCheck,
   Settings,
@@ -12,6 +13,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { WixAutoSync } from './wix-auto-sync';
+import { SignOutButton } from './sign-out-button';
 
 const nav = [
   ['/', 'Dashboard', Gauge],
@@ -43,6 +45,7 @@ export function AppShell({ children }) {
             </Link>
           ))}
         </nav>
+        <SignOutButton />
       </aside>
       <main className="content">{children}</main>
     </div>

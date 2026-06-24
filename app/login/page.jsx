@@ -15,7 +15,7 @@ export default function LoginPage() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !anonKey) {
-      setMessage('Supabase browser credentials are missing.');
+      setMessage('Auth configuration is missing.');
       setBusy(false);
       return;
     }
@@ -45,13 +45,13 @@ export default function LoginPage() {
           <form className="grid" onSubmit={submit}>
             <label>
               <span>Email</span>
-              <input type="email" name="email" required />
+              <input type="email" name="email" autoComplete="email" required />
             </label>
             <label>
               <span>Password</span>
-              <input type="password" name="password" required />
+              <input type="password" name="password" autoComplete="current-password" required />
             </label>
-            <button disabled={busy}>{busy ? 'Signing in...' : 'Sign in'}</button>
+            <button disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
             {message ? <p className="muted">{message}</p> : null}
           </form>
         </div>
