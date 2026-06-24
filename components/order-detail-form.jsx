@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { COURIERS, FEEDBACK_STATUSES, INSTALLATION_METHODS, INSTALLATION_STATUSES, ORDER_STATUSES, PAYMENT_STATUSES, SHIPMENT_STATUSES } from '@/lib/crm/constants';
+import { COURIERS, DELIVERY_METHODS, FEEDBACK_STATUSES, INSTALLATION_METHODS, INSTALLATION_STATUSES, ORDER_STATUSES, PAYMENT_STATUSES, SHIPMENT_STATUSES } from '@/lib/crm/constants';
 
 export function OrderDetailForm({ order }) {
   const [saving, setSaving] = useState(false);
@@ -66,6 +66,7 @@ export function OrderDetailForm({ order }) {
       <Select name="payment_status" label="Payment status" value={order.payment_status} options={PAYMENT_STATUSES} />
       <Select name="internal_status" label="Order status" value={order.internal_status} options={ORDER_STATUSES} />
       <Select name="shipment_status" label="Shipment status" value={order.shipment_status} options={SHIPMENT_STATUSES} />
+      <Select name="delivery_method" label="Delivery method" value={order.delivery_method} options={DELIVERY_METHODS} />
       <Select name="installation_status" label="Installation status" value={order.installation_status} options={INSTALLATION_STATUSES} />
       <Select name="installation_method" label="Installation method" value={order.installation_method} options={INSTALLATION_METHODS} />
       <Field name="install_location" label="Install location" value={order.install_location} />

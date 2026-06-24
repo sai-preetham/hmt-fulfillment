@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { buildAudit, buildOrderShipmentSummary, normalizeShipmentRecord, normalizeWixOrder } from './fulfillment.js';
+import { buildAudit, buildOrderShipmentSummary, normalizeShipmentRecord, normalizeWixOrder, normalizeAmazonOrder } from './fulfillment.js';
 import { getConfig } from './config.js';
 import { isSupabaseConfigured, SupabaseRestClient } from './supabase.js';
 
@@ -509,7 +509,8 @@ async function findSupabaseOrderByWixId(supabase, wixOrderId) {
 }
 
 async function writeAudit(supabase, tableName, recordId, action, beforeJson, afterJson, reason) {
-  await supabase.insert('audit_log', buildAudit(tableName, recordId, action, beforeJson, afterJson, reason));
+  // audit_log table has been dropped via migration 005_drop_audit_log.sql in favor of status_history.
+  // We can skip writing to the database table.
 }
 
 function getSupabaseClient() {
@@ -710,4 +711,89 @@ async function writeStore(shipments) {
 function isUniqueViolation(error) {
   const msg = String(error?.message || '');
   return msg.includes('23505') || msg.includes('unique constraint') || msg.includes('duplicate key');
+}
+
+export async function upsertAmazonOrder(amazonPayload) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+  return upsertSupabaseAmazonOrder(supabase, amazonPayload);
+}
+
+export async function upsertAmazonOrders(orders) {
+  const results = [];
+  for (const order of orders) {
+    results.push(await upsertAmazonOrder(order));
+  }
+  return results.filter(Boolean);
+}
+
+async function upsertSupabaseAmazonOrder(supabase, amazonPayload) {
+  const normalized = normalizeAmazonOrder(amazonPayload, getConfig());
+  const existingOrder = await findSupabaseOrderByAmazonId(supabase, normalized.order.external_order_id);
+  const customer = await upsertAmazonCustomer(supabase, normalized.customer);
+  const shippingAddress = await insertAddress(supabase, customer.id, normalized.shippingAddress);
+  const billingAddress = await insertAddress(supabase, customer.id, normalized.billingAddress);
+  const orderRow = {
+    ...normalized.order,
+    customer_id: customer.id,
+    shipping_address_id: shippingAddress?.id || null,
+    billing_address_id: billingAddress?.id || null,
+    updated_at: new Date().toISOString()
+  };
+  const savedOrder = await supabase.upsert('orders', orderRow, 'source,external_order_id');
+
+  await supabase.insert('order_source_versions', {
+    order_id: savedOrder.id,
+    source: 'amazon',
+    raw_order: normalized.order.raw_order
+  });
+
+  for (const item of normalized.items) {
+    await supabase.upsert('order_items', { ...item, order_id: savedOrder.id }, 'order_id,wix_line_item_id');
+    if (item.sku) {
+      await supabase.upsert(
+        'inventory_items',
+        {
+          sku: item.sku,
+          product_name: item.product_name,
+          hsn_code: item.hsn_code,
+          default_weight_grams: item.weight ? item.weight * 1000 : null
+        },
+        'sku'
+      );
+    }
+  }
+
+  await supabase.upsert('payment_refs', { ...normalized.payment, order_id: savedOrder.id }, 'order_id');
+  await writeAudit(
+    supabase,
+    'orders',
+    savedOrder.id,
+    existingOrder ? 'amazon_resync' : 'amazon_import',
+    existingOrder,
+    savedOrder,
+    'amazon order sync'
+  );
+  return savedOrder;
+}
+
+async function findSupabaseOrderByAmazonId(supabase, amazonOrderId) {
+  if (!amazonOrderId) return null;
+  const rows = await supabase.select('orders', `external_order_id=eq.${encodeURIComponent(amazonOrderId)}&source=eq.amazon&limit=1`);
+  return rows[0] || null;
+}
+
+async function upsertAmazonCustomer(supabase, customer) {
+  if (customer.email) {
+    const existing = await supabase.select('customers', `email=eq.${encodeURIComponent(customer.email)}&limit=1`);
+    if (existing && existing.length > 0) {
+      return supabase.patch('customers', `id=eq.${existing[0].id}`, customer);
+    }
+  } else if (customer.phone) {
+    const existing = await supabase.select('customers', `phone=eq.${encodeURIComponent(customer.phone)}&limit=1`);
+    if (existing && existing.length > 0) {
+      return supabase.patch('customers', `id=eq.${existing[0].id}`, customer);
+    }
+  }
+  return supabase.insert('customers', customer);
 }

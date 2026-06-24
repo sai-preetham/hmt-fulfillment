@@ -386,3 +386,54 @@ function formatDelhiveryError(body) {
   }
   return `Delhivery rejected shipment: ${JSON.stringify(body)}`;
 }
+
+export function mapAmazonOrderToDelhivery(amazonPayload, config, options = {}) {
+  const { order, address, buyer, items } = amazonPayload;
+  const country = address?.CountryCode || 'IN';
+
+  const totalAmount = Number(order?.OrderTotal?.Amount || 0);
+  const paymentMode = 'Prepaid';
+  const codAmount = 0;
+  const orderId = order?.AmazonOrderId || '';
+
+  const streetAddress = [address?.AddressLine1 || '', address?.AddressLine2 || ''].filter(Boolean).join(', ');
+
+  const shipment = removeEmpty({
+    name: address?.Name || buyer?.BuyerName || 'Amazon Customer',
+    add: streetAddress,
+    city: address?.City || '',
+    state: normalizeSubdivision(address?.StateOrRegion || ''),
+    country,
+    pin: address?.PostalCode || '',
+    phone: address?.Phone || '',
+    order: orderId,
+    payment_mode: paymentMode,
+    cod_amount: codAmount,
+    total_amount: totalAmount,
+    quantity: (items || []).reduce((sum, item) => sum + Number(item.QuantityOrdered || 1), 0) || 1,
+    products_desc: (items || []).map(item => item.Title || 'Amazon Product').join(', ').slice(0, 250),
+    shipment_width: config.defaults.widthCm,
+    shipment_height: config.defaults.heightCm,
+    shipment_length: config.defaults.lengthCm,
+    weight: config.defaults.weightGrams,
+    seller_gst_tin: config.defaults.sellerGstTin,
+    hsn_code: config.defaults.hsnCode,
+    md: config.defaults.shippingMode,
+    shipping_mode: shippingModeLabel(config.defaults.shippingMode),
+    shipment_mode: shippingModeLabel(config.defaults.shippingMode),
+    return_name: options.reverse ? config.delhivery.returnName : undefined,
+    return_add: options.reverse ? config.delhivery.returnAddress : undefined,
+    return_city: options.reverse ? config.delhivery.returnCity : undefined,
+    return_state: options.reverse ? config.delhivery.returnState : undefined,
+    return_pin: options.reverse ? config.delhivery.returnPincode : undefined,
+    return_phone: options.reverse ? config.delhivery.returnPhone : undefined
+  });
+
+  return {
+    shipments: [sanitizeShipment(shipment)],
+    pickup_location: {
+      name: config.delhivery.pickupLocation
+    }
+  };
+}
+

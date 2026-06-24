@@ -1,5 +1,5 @@
 import { getCourierAdapter } from './couriers/index.js';
-import { findShipmentByOrderId, updateOrderWixFulfillment, upsertShipment, upsertWixOrder } from './store.js';
+import { findShipmentByOrderId, updateOrderWixFulfillment, upsertShipment, upsertWixOrder, upsertAmazonOrder, findOrderById } from './store.js';
 import { createWixFulfillment } from './wixFulfillment.js';
 import { fetchWixOrder } from './wix.js';
 
@@ -144,7 +144,81 @@ function normalizeShipmentForWix(shipment) {
     courier_code: shipment.source || 'delhivery',
     courier_service_code: shipment.shippingMode === 'S' ? 'surface' : 'express',
     service_mode:
+      shipment.service_mode ||
       shipment.internationalService ||
       (shipment.shippingMode === 'S' ? 'Surface' : 'Express')
   };
+}
+
+export async function bookAmazonOrder(order, config, metadata = {}) {
+  const orderId = order?.order?.AmazonOrderId || order?.external_order_id;
+  if (!orderId) throw new Error('Amazon order is missing AmazonOrderId.');
+
+  const existing = await findShipmentByOrderId(String(orderId));
+  if (existing?.status === 'booked') {
+    return { shipment: existing, skipped: true };
+  }
+
+  const persistedOrder = await upsertAmazonOrder(order);
+  const bookingConfig = withShippingMode(config, metadata.shippingMode);
+  const courier = getCourierAdapter(metadata.courierCode || 'delhivery');
+  const payload = courier.mapOrder(order, bookingConfig, {
+    internationalService: metadata.internationalService,
+    reverse: metadata.reverse
+  });
+  const pending = await upsertShipment({
+    ...metadata,
+    dbOrderId: persistedOrder?.id,
+    orderId: String(orderId),
+    orderNumber: orderId,
+    courierCode: courier.code,
+    status: bookingConfig.createAwbOnBook ? 'pending' : 'pending-zone',
+    requestPayload: payload
+  });
+
+  if (!bookingConfig.createAwbOnBook) {
+    return {
+      shipment: {
+        ...pending,
+        message: 'Queued pending. AWB creation is disabled by CREATE_AWB_ON_BOOK=false.'
+      },
+      skipped: false
+    };
+  }
+
+  try {
+    const delhiveryResponse = await courier.createShipment(payload, bookingConfig);
+    const booked = await upsertShipment({
+      ...pending,
+      status: 'booked',
+      delhiveryResponse,
+      waybill: extractWaybill(delhiveryResponse),
+      error: ''
+    });
+    await syncBookedShipmentToAmazon(persistedOrder, booked, bookingConfig);
+    return { shipment: booked, skipped: false };
+  } catch (error) {
+    const failed = await upsertShipment({
+      ...pending,
+      status: 'failed',
+      error: error.message
+    });
+    throw Object.assign(error, { shipment: failed });
+  }
+}
+
+export async function syncBookedShipmentToAmazon(order, shipment, config) {
+  if (!order?.id || !shipment?.waybill) return null;
+  const { syncShipmentTrackingToAmazon } = await import('./amazonShipmentSync.js');
+  return syncShipmentTrackingToAmazon(order, shipment, config);
+}
+
+export async function bookAmazonOrderById(orderId, config, metadata = {}) {
+  const orderRow = await findOrderById(orderId);
+  if (!orderRow) throw new Error('Order not found.');
+  if (!orderRow.raw_order) throw new Error('Raw order payload is missing.');
+  return bookAmazonOrder(orderRow.raw_order, config, {
+    ...metadata,
+    dbOrderId: orderRow.id
+  });
 }

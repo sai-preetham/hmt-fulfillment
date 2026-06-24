@@ -2,7 +2,8 @@ import {
   calculateDelhiveryCharge,
   calculateInternationalCharge,
   createDelhiveryOrder,
-  mapWixOrderToDelhivery
+  mapWixOrderToDelhivery,
+  mapAmazonOrderToDelhivery
 } from '../delhivery.js';
 
 export const delhiveryAdapter = {
@@ -20,6 +21,9 @@ export const delhiveryAdapter = {
   },
 
   mapOrder(order, config, options) {
+    if (order?.order && order?.address && order?.buyer) {
+      return mapAmazonOrderToDelhivery(order, config, options);
+    }
     return mapWixOrderToDelhivery(order, config, options);
   },
 

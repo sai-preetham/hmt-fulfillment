@@ -188,3 +188,111 @@ function redactPaymentSecrets(value) {
     json.replace(/"([^"]*(?:card|cvv|account|upi|password|secret)[^"]*)"\s*:\s*"[^"]*"/gi, '"$1":"[redacted]"')
   );
 }
+
+export function normalizeAmazonOrder(amazonPayload, config = {}) {
+  const { order, address, buyer, items } = amazonPayload;
+  const customerName = address?.Name || buyer?.BuyerName || 'Amazon Customer';
+
+  return {
+    customer: {
+      wix_contact_id: null,
+      name: customerName,
+      email: buyer?.BuyerEmail || null,
+      phone: address?.Phone || null,
+      tax_id: buyer?.BuyerTaxInfo?.CompanyTaxEvaluator?.TaxRegistrationId || null,
+      tax_id_type: null,
+      raw_customer: {
+        buyer,
+        address
+      }
+    },
+    shippingAddress: {
+      name: address?.Name || customerName,
+      phone: address?.Phone || null,
+      address_line1: address?.AddressLine1 || '',
+      address_line2: address?.AddressLine2 || '',
+      city: address?.City || '',
+      state: address?.StateOrRegion || '',
+      postal_code: address?.PostalCode || '',
+      country: address?.CountryCode || 'IN',
+      raw_address: { address }
+    },
+    billingAddress: {
+      name: address?.Name || customerName,
+      phone: address?.Phone || null,
+      address_line1: address?.AddressLine1 || '',
+      address_line2: address?.AddressLine2 || '',
+      city: address?.City || '',
+      state: address?.StateOrRegion || '',
+      postal_code: address?.PostalCode || '',
+      country: address?.CountryCode || 'IN',
+      raw_address: { address }
+    },
+    order: {
+      wix_order_id: null,
+      external_order_id: order.AmazonOrderId,
+      order_number: order.AmazonOrderId,
+      source: 'amazon',
+      status: mapAmazonStatus(order.OrderStatus),
+      payment_status: 'paid',
+      fulfillment_status: mapAmazonFulfillmentStatus(order.OrderStatus),
+      currency: order.OrderTotal?.CurrencyCode || 'INR',
+      subtotal: numberAmount(order.OrderTotal?.Amount),
+      shipping_amount: 0,
+      tax_amount: 0,
+      discount_amount: 0,
+      total_amount: numberAmount(order.OrderTotal?.Amount),
+      selected_shipping_title: order.ShipServiceLevel || null,
+      source_created_at: order.PurchaseDate || null,
+      source_updated_at: order.LastUpdateDate || null,
+      raw_order: amazonPayload
+    },
+    items: (items || []).map(item => ({
+      wix_line_item_id: item.OrderItemId,
+      catalog_item_id: item.ASIN || null,
+      variant_id: null,
+      sku: item.SellerSKU || null,
+      product_name: item.Title || null,
+      quantity: Number(item.QuantityOrdered || 1),
+      item_price: numberAmount(item.ItemPrice?.Amount) || 0,
+      total_price: numberAmount(item.ItemPrice?.Amount) || 0,
+      weight: config.defaults?.weightGrams ? config.defaults.weightGrams / 1000 : null,
+      hsn_code: config.defaults?.hsnCode || null,
+      tax_info: item.ItemTax || {},
+      raw_line_item: item
+    })),
+    payment: {
+      payment_status: 'paid',
+      payment_method: order.PaymentMethod || 'Amazon',
+      transaction_ref: order.AmazonOrderId,
+      paid_amount: numberAmount(order.OrderTotal?.Amount),
+      refunded_amount: 0,
+      authorized_amount: numberAmount(order.OrderTotal?.Amount),
+      currency: order.OrderTotal?.CurrencyCode || 'INR',
+      raw_payment: { orderTotal: order.OrderTotal }
+    }
+  };
+}
+
+function mapAmazonStatus(status) {
+  switch (status) {
+    case 'Pending': return 'pending';
+    case 'Unshipped': return 'paid';
+    case 'PartiallyShipped': return 'partially_fulfilled';
+    case 'Shipped': return 'fulfilled';
+    case 'Canceled': return 'canceled';
+    default: return 'unknown';
+  }
+}
+
+function mapAmazonFulfillmentStatus(status) {
+  switch (status) {
+    case 'Pending': return 'not_fulfilled';
+    case 'Unshipped': return 'not_fulfilled';
+    case 'PartiallyShipped': return 'partially_fulfilled';
+    case 'Shipped': return 'fulfilled';
+    case 'Canceled': return 'canceled';
+    default: return 'not_fulfilled';
+  }
+}
+

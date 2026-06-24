@@ -31,6 +31,18 @@ export function getConfig() {
         maxPages: clamp(Number(process.env.WIX_ORDER_SYNC_MAX_PAGES || 1), 1, 20)
       }
     },
+    amazon: {
+      clientId: process.env.AMAZON_SP_API_CLIENT_ID || '',
+      clientSecret: process.env.AMAZON_SP_API_CLIENT_SECRET || '',
+      refreshToken: process.env.AMAZON_SP_API_REFRESH_TOKEN || '',
+      marketplaceId: process.env.AMAZON_MARKETPLACE_ID || 'A21TJRUUN4KGV',
+      orderSync: {
+        enabled: process.env.AMAZON_ORDER_SYNC_ENABLED === 'true',
+        intervalMs: positiveNumber(process.env.AMAZON_ORDER_SYNC_INTERVAL_MINUTES, 15) * 60 * 1000,
+        pageSize: clamp(Number(process.env.AMAZON_ORDER_SYNC_PAGE_SIZE || 25), 1, 100),
+        maxPages: clamp(Number(process.env.AMAZON_ORDER_SYNC_MAX_PAGES || 1), 1, 20)
+      }
+    },
     supabase: {
       url: process.env.SUPABASE_URL || '',
       serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
