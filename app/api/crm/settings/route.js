@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCrmSettings, saveCrmSettings } from '@/lib/crm/data';
+import { getCrmSettings, saveCrmSettings } from '@/lib/crm/data-settings';
 
 export async function GET() {
   return NextResponse.json({ settings: await getCrmSettings() });

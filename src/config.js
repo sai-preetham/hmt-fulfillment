@@ -1,6 +1,6 @@
 import process from 'node:process';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 loadEnvFile();
 
@@ -93,7 +93,7 @@ export function getConfig() {
 
 function loadEnvFile() {
   try {
-    const raw = readFileSync(fileURLToPath(new URL('../.env', import.meta.url)), 'utf8');
+    const raw = readFileSync(join(process.cwd(), '.env'), 'utf8');
     for (const line of raw.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;

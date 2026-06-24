@@ -1,10 +1,10 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { buildAudit, buildOrderShipmentSummary, normalizeShipmentRecord, normalizeWixOrder } from './fulfillment.js';
 import { getConfig } from './config.js';
 import { isSupabaseConfigured, SupabaseRestClient } from './supabase.js';
 
-const STORE_PATH = new URL('../data/shipments.json', import.meta.url);
+const STORE_PATH = join(process.cwd(), 'data', 'shipments.json');
 
 export async function listShipments() {
   const supabase = getSupabaseClient();
@@ -699,7 +699,7 @@ async function readStore() {
 }
 
 async function writeStore(shipments) {
-  await mkdir(dirname(STORE_PATH.pathname), { recursive: true });
+  await mkdir(dirname(STORE_PATH), { recursive: true });
   await writeFile(STORE_PATH, JSON.stringify(shipments, null, 2));
 }
 

@@ -1,5 +1,5 @@
 import { findLatestShipmentForOrder, findOrderById, updateOrderWixFulfillment } from './store.js';
-import { createWixFulfillment, updateWixFulfillment } from './wixFulfillment.js';
+import { createWixFulfillment } from './wixFulfillment.js';
 
 export async function syncShipmentTrackingToWix(order, shipment, config) {
   if (!order?.id || !shipment?.waybill) return null;
@@ -46,9 +46,7 @@ async function syncWixFulfillment(order, shipment, config, fulfillmentStatus) {
   try {
     const existingFulfillmentId = order.wix_fulfillment_id || shipment.wix_fulfillment_id || '';
     const normalizedShipment = normalizeShipmentForWix(shipment);
-    const result = existingFulfillmentId
-      ? await updateWixFulfillment(order, existingFulfillmentId, normalizedShipment, config)
-      : await createWixFulfillment(order, normalizedShipment, config);
+    const result = await createWixFulfillment(order, normalizedShipment, config);
 
     if (result.skipped) {
       return updateOrderWixFulfillment(order.id, {

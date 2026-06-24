@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { applyCrmSettingsToConfig } from '@/lib/crm/settings';
-import { getCrmSettings } from '@/lib/crm/data';
+import { getCrmSettings } from '@/lib/crm/data-settings';
 import { getConfig } from '@/src/config.js';
 import { findLatestShipmentForOrder, findOrderById } from '@/src/store.js';
 import { markOrderPackedInWix, syncShipmentTrackingToWix } from '@/src/wixShipmentSync.js';
