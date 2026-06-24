@@ -12,7 +12,7 @@ export async function createWixFulfillment(order, shipment, config) {
       trackingInfo: removeEmpty({
         trackingNumber: shipment.waybill,
         shippingProvider: shipment.service_mode || shipment.courier_service_code || shipment.courier_code || 'Delhivery',
-        trackingLink: buildTrackingUrl(shipment.waybill, config)
+        trackingLink: buildTrackingUrl(shipment.waybill, config, shipment.courier_code)
       }),
       lineItems: buildLineItems(order.raw_order)
     })
@@ -42,8 +42,17 @@ export async function createWixFulfillment(order, shipment, config) {
   };
 }
 
-export function buildTrackingUrl(waybill, config) {
-  const template = config.wix.trackingUrlTemplate || config.delhivery.trackingUrlTemplate || '';
+export function buildTrackingUrl(waybill, config, courierCode = 'delhivery') {
+  let template = config.wix.trackingUrlTemplate;
+  if (!template || template.includes('delhivery.com')) {
+    if (courierCode === 'fedex') {
+      template = config.fedex?.trackingUrlTemplate || 'https://www.fedex.com/fedextrack/?trknbr={waybill}';
+    } else if (courierCode === 'shiprocket') {
+      template = config.shiprocket?.trackingUrlTemplate || 'https://www.shiprocket.in/shipment-tracking/{waybill}';
+    } else {
+      template = config.delhivery.trackingUrlTemplate || 'https://www.delhivery.com/track/package/{waybill}';
+    }
+  }
   return template ? template.replaceAll('{waybill}', encodeURIComponent(waybill)) : '';
 }
 

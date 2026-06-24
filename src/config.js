@@ -88,13 +88,23 @@ export function getConfig() {
       trackingEnabled: process.env.SHIPROCKET_TRACKING_ENABLED === 'true',
       trackingBatchSize: clamp(Number(process.env.SHIPROCKET_TRACKING_BATCH_SIZE || 10), 1, 25)
     },
+    fedex: {
+      baseUrl: process.env.FEDEX_BASE_URL || 'https://apis.fedex.com',
+      clientId: process.env.FEDEX_CLIENT_ID || '',
+      clientSecret: process.env.FEDEX_CLIENT_SECRET || '',
+      accountNumber: process.env.FEDEX_ACCOUNT_NUMBER || '',
+      trackingUrlTemplate: process.env.FEDEX_TRACKING_URL_TEMPLATE || 'https://www.fedex.com/fedextrack/?trknbr={waybill}',
+      trackingEnabled: process.env.FEDEX_TRACKING_ENABLED === 'true',
+      trackingBatchSize: clamp(Number(process.env.FEDEX_TRACKING_BATCH_SIZE || 10), 1, 25),
+      webhookSecret: process.env.FEDEX_WEBHOOK_SECRET || ''
+    },
     defaults: {
       sellerGstTin: process.env.DEFAULT_SELLER_GST_TIN || '',
       hsnCode: process.env.DEFAULT_HSN_CODE || '',
-      weightGrams: Number(process.env.DEFAULT_WEIGHT_GRAMS || 500),
-      lengthCm: Number(process.env.DEFAULT_LENGTH_CM || 10),
-      widthCm: Number(process.env.DEFAULT_WIDTH_CM || 10),
-      heightCm: Number(process.env.DEFAULT_HEIGHT_CM || 10),
+      weightGrams: Number(process.env.DEFAULT_WEIGHT_GRAMS || 400),
+      lengthCm: Number(process.env.DEFAULT_LENGTH_CM || 23),
+      widthCm: Number(process.env.DEFAULT_WIDTH_CM || 14),
+      heightCm: Number(process.env.DEFAULT_HEIGHT_CM || 6),
       paymentMode: process.env.DEFAULT_PAYMENT_MODE || 'Prepaid',
       shippingMode: normalizeShippingMode(process.env.DEFAULT_SHIPPING_MODE || 'Express'),
       internationalShipmentType: process.env.DEFAULT_INTERNATIONAL_SHIPMENT_TYPE || 'Commercial',

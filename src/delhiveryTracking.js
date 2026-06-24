@@ -21,6 +21,13 @@ import {
   getShiprocketLiveStatus,
   normalizeShiprocketStatus
 } from './shiprocketTracking.js';
+import {
+  extractFedexTrackingEvents,
+  fetchFedexTracking,
+  getFedexLiveLocation,
+  getFedexLiveStatus,
+  normalizeFedexStatus
+} from './fedexTracking.js';
 
 // ---------------------------------------------------------------------------
 // Delhivery tracking API
@@ -163,7 +170,7 @@ export function createDelhiveryTrackingSync(config, options = {}) {
   let timer = null;
 
   const state = {
-    enabled: Boolean(config.delhivery.trackingEnabled || config.shiprocket?.trackingEnabled),
+    enabled: Boolean(config.delhivery.trackingEnabled || config.shiprocket?.trackingEnabled || config.fedex?.trackingEnabled),
     running: false,
     lastReason: '',
     lastStartedAt: null,
@@ -185,6 +192,13 @@ export function createDelhiveryTrackingSync(config, options = {}) {
       (!config.shiprocket.email || !config.shiprocket.password)
     ) {
       return failSkip('missing-shiprocket-credentials');
+    }
+    if (
+      config.fedex?.trackingEnabled &&
+      !config.fedex.clientId &&
+      !config.fedex.clientSecret
+    ) {
+      return failSkip('missing-fedex-credentials');
     }
     if (!isSupabaseConfigured(config)) return failSkip('missing-supabase-config');
 
@@ -223,7 +237,7 @@ export function createDelhiveryTrackingSync(config, options = {}) {
     logger.log?.(
       `Tracking sync enabled: every ${Math.round(
         config.delhivery.trackingIntervalMs / 60_000
-      )} min, Delhivery batch size ${config.delhivery.trackingBatchSize}, Shiprocket batch size ${config.shiprocket?.trackingBatchSize || 10}`
+      )} min, Delhivery batch size ${config.delhivery.trackingBatchSize}, Shiprocket batch size ${config.shiprocket?.trackingBatchSize || 10}, FedEx batch size ${config.fedex?.trackingBatchSize || 10}`
     );
     return snapshot();
   }
@@ -258,6 +272,7 @@ async function runTrackingPass(config, state, logger) {
   const shipmentsByCourier = groupShipmentsByCourier(activeShipments);
   await pollCourierTracking('delhivery', shipmentsByCourier.get('delhivery') || [], config.delhivery.trackingBatchSize, config, state, logger);
   await pollCourierTracking('shiprocket', shipmentsByCourier.get('shiprocket') || [], config.shiprocket?.trackingBatchSize || 10, config, state, logger);
+  await pollCourierTracking('fedex', shipmentsByCourier.get('fedex') || [], config.fedex?.trackingBatchSize || 10, config, state, logger);
 }
 
 async function pollCourierTracking(courierCode, activeShipments, batchSize, config, state, logger) {
@@ -347,21 +362,25 @@ function normalizeWaybillKey(waybill) {
 }
 
 function isCourierTrackingEnabled(courierCode, config) {
+  if (courierCode === 'fedex') return Boolean(config.fedex?.trackingEnabled);
   if (courierCode === 'shiprocket') return Boolean(config.shiprocket?.trackingEnabled);
   return Boolean(config.delhivery.trackingEnabled);
 }
 
 function fetchCourierTracking(courierCode, waybills, config) {
+  if (courierCode === 'fedex') return fetchFedexTracking(waybills, config);
   if (courierCode === 'shiprocket') return fetchShiprocketTracking(waybills, config);
   return fetchDelhiveryTracking(waybills, config);
 }
 
 function normalizeCourierStatus(courierCode, rawStatus) {
+  if (courierCode === 'fedex') return normalizeFedexStatus(rawStatus);
   if (courierCode === 'shiprocket') return normalizeShiprocketStatus(rawStatus);
   return normalizeDelhiveryStatus(rawStatus);
 }
 
 function getCourierLiveStatus(courierCode, pkg) {
+  if (courierCode === 'fedex') return getFedexLiveStatus(pkg);
   if (courierCode === 'shiprocket') return getShiprocketLiveStatus(pkg);
   return (
     pkg?.Status?.Status ||
@@ -374,6 +393,7 @@ function getCourierLiveStatus(courierCode, pkg) {
 }
 
 function getCourierLiveLocation(courierCode, pkg) {
+  if (courierCode === 'fedex') return getFedexLiveLocation(pkg);
   if (courierCode === 'shiprocket') return getShiprocketLiveLocation(pkg);
   return (
     pkg?.Status?.Instructions ||
@@ -385,6 +405,7 @@ function getCourierLiveLocation(courierCode, pkg) {
 }
 
 function extractCourierTrackingEvents(courierCode, pkg) {
+  if (courierCode === 'fedex') return extractFedexTrackingEvents(pkg);
   if (courierCode === 'shiprocket') return extractShiprocketTrackingEvents(pkg);
   return extractTrackingEvents(pkg);
 }

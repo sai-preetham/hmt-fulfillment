@@ -28,8 +28,8 @@ values
   (
     'shipment_defaults',
     '{
-      "domestic": {"weightGrams": 400, "lengthCm": 23, "widthCm": 15, "heightCm": 5},
-      "international": {"weightGrams": 400, "lengthCm": 23, "widthCm": 15, "heightCm": 6},
+      "domestic": {"weightGrams": 400, "lengthCm": 23, "widthCm": 14, "heightCm": 6},
+      "international": {"weightGrams": 400, "lengthCm": 24, "widthCm": 15, "heightCm": 6},
       "paymentMode": "Prepaid",
       "domesticServiceCode": "express",
       "internationalServiceCode": "dlv_saver"

@@ -1,11 +1,13 @@
 import { delhiveryAdapter } from './delhivery.js';
 import { shreeMarutiAdapter } from './shreeMaruti.js';
 import { shiprocketAdapter } from './shiprocket.js';
+import { fedexAdapter } from './fedex.js';
 
 const adapters = new Map([
   [delhiveryAdapter.code, delhiveryAdapter],
   [shiprocketAdapter.code, shiprocketAdapter],
-  [shreeMarutiAdapter.code, shreeMarutiAdapter]
+  [shreeMarutiAdapter.code, shreeMarutiAdapter],
+  [fedexAdapter.code, fedexAdapter]
 ]);
 
 export function getCourierAdapter(code = 'delhivery') {
