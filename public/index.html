@@ -3,113 +3,102 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Wix to Delhivery</title>
+    <title>Shipping Ops</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="shell">
-      <section class="hero">
+      <header class="topbar">
         <div>
-          <p class="eyebrow">Shipment booking</p>
-          <h1>Wix orders to Delhivery</h1>
-          <p class="lede">Book shipments, inspect webhook intake, and retry failed Delhivery manifests.</p>
+          <p class="eyebrow">Shipping ops</p>
+          <h1>Shipment work queue</h1>
         </div>
-        <button id="refreshButton" type="button">Refresh</button>
-      </section>
+        <div class="topActions">
+          <button id="internationalExportButton" type="button" class="secondary">International Excel</button>
+          <button id="syncButton" type="button" class="secondary">Sync Wix</button>
+          <button id="syncFulfilledButton" type="button" class="secondary">Sync Fulfilled</button>
+          <button id="syncCancelledButton" type="button" class="secondary">Sync Cancelled</button>
+          <button id="pullTrackingButton" type="button" class="secondary">Pull Tracking</button>
+          <button id="refreshButton" type="button">Refresh</button>
+        </div>
+      </header>
 
-      <section class="grid">
-        <form id="pullOrdersForm" class="panel">
-          <h2>Pull Wix Orders</h2>
-          <div class="twoCols">
-            <label for="limit">Limit</label>
-            <label for="paymentStatus">Payment</label>
-            <input id="limit" name="limit" type="number" min="1" max="100" value="25" />
-            <select id="paymentStatus" name="paymentStatus">
-              <option value="">Any</option>
-              <option value="PAID">Paid</option>
-              <option value="NOT_PAID">Not paid</option>
-              <option value="PARTIALLY_REFUNDED">Partially refunded</option>
-              <option value="FULLY_REFUNDED">Fully refunded</option>
-            </select>
-          </div>
-          <label for="fulfillmentStatus">Fulfillment</label>
-          <select id="fulfillmentStatus" name="fulfillmentStatus">
-            <option value="">Any</option>
-            <option value="NOT_FULFILLED">Not fulfilled</option>
-            <option value="FULFILLED">Fulfilled</option>
-            <option value="PARTIALLY_FULFILLED">Partially fulfilled</option>
-          </select>
-          <button type="submit">Pull Orders</button>
-        </form>
-
-        <form id="wixForm" class="panel">
-          <h2>Book Wix Order</h2>
-          <label for="orderId">Wix order ID</label>
-          <div class="row">
-            <input id="orderId" name="orderId" placeholder="e.g. 58c9a790-..." required />
-            <button type="submit">Book</button>
-          </div>
-        </form>
-
-        <form id="jsonForm" class="panel">
-          <h2>Book From JSON</h2>
-          <label for="orderJson">Order JSON</label>
-          <textarea id="orderJson" name="orderJson" spellcheck="false"></textarea>
-          <button type="submit">Create Shipment</button>
-        </form>
+      <section class="metrics" aria-label="Shipping summary">
+        <div class="metric">
+          <span>Needs packing</span>
+          <strong id="needsPackingCount">0</strong>
+        </div>
+        <div class="metric">
+          <span>Needs booking</span>
+          <strong id="needsBookingCount">0</strong>
+        </div>
+        <div class="metric">
+          <span>Ready for pickup</span>
+          <strong id="readyPickupCount">0</strong>
+        </div>
+        <div class="metric">
+          <span>In transit</span>
+          <strong id="inTransitCount">0</strong>
+        </div>
+        <div class="metric">
+          <span>Needs call</span>
+          <strong id="needsCallCount">0</strong>
+        </div>
+        <div class="metric">
+          <span>Completed</span>
+          <strong id="completedCount">0</strong>
+        </div>
       </section>
 
       <section class="panel">
-        <div class="sectionHeader">
-          <h2>Wix Orders</h2>
-          <span id="ordersStatusText">Not pulled yet</span>
+        <div class="queueHeader">
+          <div class="tabs" role="tablist" aria-label="Queue filters">
+            <button type="button" class="tab active" data-queue="needs_packing">Needs packing</button>
+            <button type="button" class="tab" data-queue="needs_booking">Needs booking</button>
+            <button type="button" class="tab" data-queue="ready_for_pickup">Ready for pickup</button>
+            <button type="button" class="tab" data-queue="in_transit">In transit</button>
+            <button type="button" class="tab" data-queue="needs_call">Needs call</button>
+            <button type="button" class="tab" data-queue="completed">Completed</button>
+            <button type="button" class="tab" data-queue="wix_update_failed">Wix failed</button>
+            <button type="button" class="tab" data-queue="failed">Failed booking</button>
+            <button type="button" class="tab" data-queue="international_pending">International pending</button>
+            <button type="button" class="tab" data-queue="cancelled">Cancelled</button>
+            <button type="button" class="tab" data-queue="all_recent">All recent</button>
+          </div>
+          <span id="ordersStatusText">Loading...</span>
         </div>
+
         <div class="tableWrap">
           <table>
             <thead>
               <tr>
                 <th>Order</th>
-                <th>Customer</th>
-                <th>Product</th>
-                <th>Total</th>
+                <th>Destination</th>
+                <th>Items</th>
                 <th>Shipping</th>
-                <th>Delhivery Cost</th>
-                <th>Payment</th>
-                <th>Fulfillment</th>
-                <th>Created</th>
-                <th>Action</th>
+                <th>Shipment</th>
+                <th>Wix</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="ordersBody"></tbody>
           </table>
         </div>
-        <div class="actions">
-          <button id="nextOrdersButton" type="button" disabled>Next Page</button>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="sectionHeader">
-          <h2>Shipment Log</h2>
-          <span id="statusText">Loading...</span>
-        </div>
-        <div class="tableWrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Order</th>
-                <th>Waybill</th>
-                <th>Source</th>
-                <th>Updated</th>
-                <th>Message</th>
-              </tr>
-            </thead>
-            <tbody id="shipmentsBody"></tbody>
-          </table>
-        </div>
       </section>
     </main>
+
+    <aside id="drawer" class="drawer" aria-hidden="true">
+      <div class="drawerPanel">
+        <div class="drawerHeader">
+          <div>
+            <p class="eyebrow">Order details</p>
+            <h2 id="drawerTitle">Order</h2>
+          </div>
+          <button id="drawerClose" type="button" class="iconButton" aria-label="Close">x</button>
+        </div>
+        <div id="drawerBody" class="drawerBody"></div>
+      </div>
+    </aside>
 
     <script src="/app.js" type="module"></script>
   </body>

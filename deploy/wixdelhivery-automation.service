@@ -1,0 +1,9 @@
+[Unit]
+Description=Wix Delhivery automation trigger
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/wixdelhivery/.env
+ExecStart=/usr/bin/curl -fsS --retry 6 --retry-connrefused --retry-delay 5 -X POST http://127.0.0.1:3000/api/automation/run -H "Authorization: Bearer ${AUTOMATION_SECRET}" -H "Content-Type: application/json" -d "{\"trigger\":\"systemd\",\"force\":true}"

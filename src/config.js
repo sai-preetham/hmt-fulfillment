@@ -1,5 +1,6 @@
 import process from 'node:process';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 loadEnvFile();
 
@@ -16,7 +17,19 @@ export function getConfig() {
       siteId: process.env.WIX_SITE_ID || '',
       accountId: process.env.WIX_ACCOUNT_ID || '',
       webhookPublicKey: normalizePem(process.env.WIX_WEBHOOK_PUBLIC_KEY || ''),
-      webhookSecret: process.env.WIX_WEBHOOK_SECRET || ''
+      webhookSecret: process.env.WIX_WEBHOOK_SECRET || '',
+      requestTimeoutMs: positiveNumber(process.env.WIX_REQUEST_TIMEOUT_SECONDS, 30) * 1000,
+      fulfillmentSyncEnabled: process.env.WIX_FULFILLMENT_SYNC_ENABLED !== 'false',
+      trackingUrlTemplate:
+        process.env.WIX_TRACKING_URL_TEMPLATE ||
+        process.env.DELHIVERY_TRACKING_URL_TEMPLATE ||
+        'https://www.delhivery.com/track/package/{waybill}',
+      orderSync: {
+        enabled: process.env.WIX_ORDER_SYNC_ENABLED === 'true',
+        intervalMs: positiveNumber(process.env.WIX_ORDER_SYNC_INTERVAL_MINUTES, 5) * 60 * 1000,
+        pageSize: clamp(Number(process.env.WIX_ORDER_SYNC_PAGE_SIZE || 25), 1, 100),
+        maxPages: clamp(Number(process.env.WIX_ORDER_SYNC_MAX_PAGES || 1), 1, 20)
+      }
     },
     supabase: {
       url: process.env.SUPABASE_URL || '',
@@ -35,6 +48,16 @@ export function getConfig() {
       returnState: process.env.DELHIVERY_RETURN_STATE || '',
       returnPincode: process.env.DELHIVERY_RETURN_PINCODE || process.env.DELHIVERY_PICKUP_PINCODE || '',
       returnPhone: process.env.DELHIVERY_RETURN_PHONE || '',
+      labelUrl:
+        process.env.DELHIVERY_LABEL_URL ||
+        (delhiveryEnv === 'production'
+          ? 'https://track.delhivery.com/api/p/packing_slip'
+          : 'https://staging-express.delhivery.com/api/p/packing_slip'),
+      trackingUrlTemplate: process.env.DELHIVERY_TRACKING_URL_TEMPLATE || 'https://www.delhivery.com/track/package/{waybill}',
+      trackingApiUrl: 'https://track.delhivery.com/api/v1/packages/json/',
+      trackingEnabled: process.env.DELHIVERY_TRACKING_ENABLED === 'true',
+      trackingIntervalMs: positiveNumber(process.env.DELHIVERY_TRACKING_INTERVAL_MINUTES, 30) * 60_000,
+      trackingBatchSize: clamp(Number(process.env.DELHIVERY_TRACKING_BATCH_SIZE || 25), 1, 50),
       invoiceUrl:
         delhiveryEnv === 'production'
           ? 'https://track.delhivery.com/api/kinko/v1/invoice/charges/.json'
@@ -43,6 +66,15 @@ export function getConfig() {
         delhiveryEnv === 'production'
           ? 'https://track.delhivery.com/api/cmu/create.json'
           : 'https://staging-express.delhivery.com/api/cmu/create.json'
+    },
+    shiprocket: {
+      baseUrl: process.env.SHIPROCKET_BASE_URL || 'https://apiv2.shiprocket.in/v1/external',
+      token: process.env.SHIPROCKET_API_TOKEN || process.env.SHIPROCKET_AUTH_TOKEN || '',
+      email: process.env.SHIPROCKET_EMAIL || '',
+      password: process.env.SHIPROCKET_PASSWORD || '',
+      trackingUrlTemplate: process.env.SHIPROCKET_TRACKING_URL_TEMPLATE || 'https://www.shiprocket.in/shipment-tracking/{waybill}',
+      trackingEnabled: process.env.SHIPROCKET_TRACKING_ENABLED === 'true',
+      trackingBatchSize: clamp(Number(process.env.SHIPROCKET_TRACKING_BATCH_SIZE || 10), 1, 25)
     },
     defaults: {
       sellerGstTin: process.env.DEFAULT_SELLER_GST_TIN || '',
@@ -61,7 +93,7 @@ export function getConfig() {
 
 function loadEnvFile() {
   try {
-    const raw = readFileSync(new URL('../.env', import.meta.url), 'utf8');
+    const raw = readFileSync(fileURLToPath(new URL('../.env', import.meta.url)), 'utf8');
     for (const line of raw.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
@@ -93,4 +125,14 @@ function parseInternationalRateCard(value) {
   } catch {
     return {};
   }
+}
+
+function positiveNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function clamp(value, min, max) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
 }

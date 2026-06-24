@@ -4,13 +4,29 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "legacy:start": "node src/server.js",
+    "legacy:dev": "node --watch src/server.js",
     "test": "node --test",
+    "audit:crm-options": "node scripts/audit-crm-options.js",
+    "audit:crm-stage-options": "node scripts/audit-crm-stage-options.js",
     "import:shipments": "node scripts/import-local-shipments-to-supabase.js",
-    "backfill:wix-orders": "node scripts/backfill-wix-orders-to-supabase.js"
+    "sync:wix-crm": "node scripts/sync-wix-orders-to-crm.js",
+    "sync:legacy-crm-fields": "node scripts/sync-legacy-crm-fields.js",
+    "backfill:wix-orders": "node scripts/backfill-wix-orders-to-supabase.js",
+    "backfill:wix-fulfillments": "node scripts/backfill-wix-fulfillments-to-supabase.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.1",
+    "lucide-react": "^1.17.0",
+    "next": "^16.2.9",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   }
 }

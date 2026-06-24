@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeShipmentRecord, normalizeWixOrder } from '../src/fulfillment.js';
+import { buildOrderShipmentSummary, normalizeShipmentRecord, normalizeWixOrder } from '../src/fulfillment.js';
+import { upsertWixFulfillmentTracking } from '../src/store.js';
 import { getCourierAdapter, listCourierServices } from '../src/couriers/index.js';
 
 test('normalizes Wix order into customer, order, items, and payment refs', () => {
@@ -43,10 +44,139 @@ test('normalizes shipment record without deleting raw request and response data'
   assert.equal(record.carrier_response.success, true);
 });
 
-test('lists Delhivery and Shree Maruti courier adapters', () => {
+test('builds order shipment summary with awb and service details', () => {
+  const summary = buildOrderShipmentSummary(
+    {
+      status: 'booked',
+      waybill: 'awb-1',
+      courier_code: 'delhivery',
+      courier_service_code: 'surface',
+      service_mode: 'Surface',
+      updated_at: '2026-06-04T10:00:00.000Z'
+    },
+    '2026-06-04T10:01:00.000Z'
+  );
+
+  assert.equal(summary.shipment_status, 'booked');
+  assert.equal(summary.shipment_waybill, 'awb-1');
+  assert.equal(summary.shipment_courier_code, 'delhivery');
+  assert.equal(summary.shipment_service_code, 'surface');
+  assert.equal(summary.shipment_service_mode, 'Surface');
+  assert.equal(summary.shipment_booked_at, '2026-06-04T10:00:00.000Z');
+  assert.equal(summary.shipment_updated_at, '2026-06-04T10:00:00.000Z');
+});
+
+test('does not mark order shipment as booked until an awb exists', () => {
+  const summary = buildOrderShipmentSummary(
+    {
+      status: 'pending',
+      courier_code: 'delhivery',
+      courier_service_code: 'express',
+      service_mode: 'Express'
+    },
+    '2026-06-04T10:01:00.000Z'
+  );
+
+  assert.equal(summary.shipment_status, 'pending');
+  assert.equal(summary.shipment_waybill, null);
+  assert.equal(summary.shipment_booked_at, null);
+  assert.equal(summary.shipment_updated_at, '2026-06-04T10:01:00.000Z');
+});
+
+test('preserves booked timestamp when later shipment updates still have an awb', () => {
+  const summary = buildOrderShipmentSummary(
+    {
+      status: 'in-transit',
+      waybill: 'awb-1',
+      courier_code: 'delhivery',
+      courier_service_code: 'surface',
+      service_mode: 'Surface',
+      updated_at: '2026-06-04T10:30:00.000Z'
+    },
+    '2026-06-04T10:31:00.000Z'
+  );
+
+  assert.equal(Object.hasOwn(summary, 'shipment_booked_at'), false);
+  assert.equal(summary.shipment_status, 'in-transit');
+  assert.equal(summary.shipment_waybill, 'awb-1');
+});
+
+test('lists configured courier adapters', () => {
   assert.equal(getCourierAdapter('delhivery').code, 'delhivery');
+  assert.equal(getCourierAdapter('shiprocket').code, 'shiprocket');
   assert.equal(getCourierAdapter('shree_maruti').code, 'shree_maruti');
+  assert.equal(listCourierServices().some(courier => courier.code === 'shiprocket'), true);
   assert.equal(listCourierServices().some(courier => courier.code === 'shree_maruti'), true);
+});
+
+test('persists tracking details pulled from Wix fulfillments', async () => {
+  const originalFetch = global.fetch;
+  const requests = [];
+  global.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
+    if (String(url).includes('/rest/v1/shipments?legacy_order_id')) {
+      return jsonResponse([]);
+    }
+    if (String(url).includes('/rest/v1/shipments') && options.method === 'POST') {
+      return jsonResponse([
+        {
+          id: 'shipment-id',
+          order_id: 'order-db-id',
+          legacy_order_id: 'wix-order-id',
+          order_number: '1001',
+          status: 'booked',
+          waybill: 'AWB-WIX-1',
+          courier_code: 'delhivery'
+        }
+      ]);
+    }
+    if (String(url).includes('/rest/v1/shipment_attempts') && (options.method || 'GET') === 'GET') {
+      return jsonResponse([]);
+    }
+    if (String(url).includes('/rest/v1/shipment_attempts') && options.method === 'POST') {
+      return jsonResponse([{ id: 'attempt-id' }]);
+    }
+    if (String(url).includes('/rest/v1/orders') && options.method === 'PATCH') {
+      return jsonResponse([{ id: 'order-db-id', ...requests.at(-1).body }]);
+    }
+    if (String(url).includes('/rest/v1/audit_log') && options.method === 'POST') {
+      return jsonResponse([{ id: 'audit-id' }]);
+    }
+    throw new Error(`Unexpected request ${options.method || 'GET'} ${url}`);
+  };
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role';
+
+  try {
+    const result = await upsertWixFulfillmentTracking(
+      {
+        id: 'order-db-id',
+        wix_order_id: 'wix-order-id',
+        order_number: '1001'
+      },
+      [
+        {
+          id: 'fulfillment-id',
+          createdDate: '2026-06-10T08:09:21.460Z',
+          trackingInfo: {
+            trackingNumber: 'AWB-WIX-1',
+            shippingProvider: 'Express',
+            trackingLink: 'https://www.delhivery.com/track/package/AWB-WIX-1'
+          }
+        }
+      ]
+    );
+
+    const shipmentPost = requests.find(request => request.url.includes('/rest/v1/shipments') && request.method === 'POST');
+    assert.equal(result.persisted, 1);
+    assert.equal(shipmentPost.body.waybill, 'AWB-WIX-1');
+    assert.equal(shipmentPost.body.courier_code, 'delhivery');
+    assert.equal(shipmentPost.body.carrier_response.trackingInfo.trackingLink, 'https://www.delhivery.com/track/package/AWB-WIX-1');
+  } finally {
+    global.fetch = originalFetch;
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  }
 });
 
 function sampleOrder() {
@@ -103,5 +233,13 @@ function sampleOrder() {
         physicalProperties: { sku: 'SKU-1', weight: 0.4 }
       }
     ]
+  };
+}
+
+function jsonResponse(payload, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(payload)
   };
 }
