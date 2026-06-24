@@ -51,7 +51,7 @@ test('keeps tracking pending even after courier pickup', async () => {
     if (String(url).includes('/rest/v1/orders') && options.method === 'PATCH') {
       return jsonResponse([{ id: 'order-db-id', ...requests.at(-1).body }]);
     }
-    if (String(url).includes('/fulfillments/fulfillment-1/orders/wix-order-1')) {
+    if (String(url).includes('/create-fulfillment')) {
       return jsonResponse({ fulfillment: { id: 'fulfillment-1' } });
     }
     throw new Error(`Unexpected request ${options.method || 'GET'} ${url}`);
@@ -71,9 +71,9 @@ test('keeps tracking pending even after courier pickup', async () => {
       config()
     );
 
-    const wixRequest = requests.find(request => request.url.includes('/fulfillments/fulfillment-1/orders/wix-order-1'));
+    const wixRequest = requests.find(request => request.url.includes('/create-fulfillment'));
     const orderPatches = requests.filter(request => request.url.includes('/rest/v1/orders') && request.method === 'PATCH');
-    assert.equal(wixRequest.method, 'PATCH');
+    assert.equal(wixRequest.method, 'POST');
     assert.equal(wixRequest.body.fulfillment.trackingInfo.trackingNumber, 'AWB123');
     assert.equal(wixRequest.body.fulfillment.trackingInfo.trackingLink, 'https://track.example/AWB123');
     assert.equal('status' in wixRequest.body.fulfillment, false);
@@ -116,7 +116,7 @@ test('marks Wix fulfillment fulfilled when order is packed', async () => {
     if (String(url).includes('/rest/v1/orders') && options.method === 'PATCH') {
       return jsonResponse([{ id: 'order-db-id', ...requests.at(-1).body }]);
     }
-    if (String(url).includes('/fulfillments/fulfillment-1/orders/wix-order-1')) {
+    if (String(url).includes('/create-fulfillment')) {
       return jsonResponse({ fulfillment: { id: 'fulfillment-1' } });
     }
     throw new Error(`Unexpected request ${options.method || 'GET'} ${url}`);
@@ -127,9 +127,9 @@ test('marks Wix fulfillment fulfilled when order is packed', async () => {
   try {
     await markOrderPackedInWix('order-db-id', config());
 
-    const wixRequest = requests.find(request => request.url.includes('/fulfillments/fulfillment-1/orders/wix-order-1'));
+    const wixRequest = requests.find(request => request.url.includes('/create-fulfillment'));
     const orderPatches = requests.filter(request => request.url.includes('/rest/v1/orders') && request.method === 'PATCH');
-    assert.equal(wixRequest.method, 'PATCH');
+    assert.equal(wixRequest.method, 'POST');
     assert.equal(wixRequest.body.fulfillment.trackingInfo.trackingNumber, 'AWB123');
     assert.equal('status' in wixRequest.body.fulfillment, false);
     assert.equal(orderPatches[0].body.wix_fulfillment_status, 'pending-fulfillment');

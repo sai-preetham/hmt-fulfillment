@@ -420,8 +420,12 @@ async function upsertSupabaseWixOrder(supabase, order) {
   const normalized = normalizeWixOrder(order, getConfig());
   const existingOrder = await findSupabaseOrderByWixId(supabase, normalized.order.wix_order_id);
   const customer = await upsertCustomer(supabase, normalized.customer);
-  const shippingAddress = await insertAddress(supabase, customer.id, normalized.shippingAddress);
-  const billingAddress = await insertAddress(supabase, customer.id, normalized.billingAddress);
+  const shippingAddress = existingOrder?.shipping_address_id
+    ? { id: existingOrder.shipping_address_id }
+    : await insertAddress(supabase, customer.id, normalized.shippingAddress);
+  const billingAddress = existingOrder?.billing_address_id
+    ? { id: existingOrder.billing_address_id }
+    : await insertAddress(supabase, customer.id, normalized.billingAddress);
   const orderRow = {
     ...normalized.order,
     customer_id: customer.id,
@@ -431,11 +435,14 @@ async function upsertSupabaseWixOrder(supabase, order) {
   };
   const savedOrder = await supabase.upsert('orders', orderRow, 'wix_order_id');
 
-  await supabase.insert('order_source_versions', {
-    order_id: savedOrder.id,
-    source: 'wix',
-    raw_order: normalized.order.raw_order
-  });
+  const rawChanged = !existingOrder || JSON.stringify(existingOrder.raw_order) !== JSON.stringify(normalized.order.raw_order);
+  if (rawChanged) {
+    await supabase.insert('order_source_versions', {
+      order_id: savedOrder.id,
+      source: 'wix',
+      raw_order: normalized.order.raw_order
+    });
+  }
 
   for (const item of normalized.items) {
     await supabase.upsert('order_items', { ...item, order_id: savedOrder.id }, 'order_id,wix_line_item_id');
@@ -467,7 +474,19 @@ async function upsertSupabaseWixOrder(supabase, order) {
 }
 
 async function upsertCustomer(supabase, customer) {
-  if (customer.wix_contact_id) return supabase.upsert('customers', customer, 'wix_contact_id');
+  if (customer.wix_contact_id) {
+    const existing = await supabase.select('customers', `wix_contact_id=eq.${encodeURIComponent(customer.wix_contact_id)}&limit=1`);
+    if (existing && existing.length > 0) {
+      const merged = {
+        ...customer,
+        tax_id: existing[0].tax_id || customer.tax_id,
+        tax_id_type: existing[0].tax_id_type || customer.tax_id_type,
+        email: existing[0].email || customer.email,
+        phone: existing[0].phone || customer.phone
+      };
+      return supabase.patch('customers', `id=eq.${existing[0].id}`, merged);
+    }
+  }
   return supabase.insert('customers', customer);
 }
 
@@ -731,8 +750,12 @@ async function upsertSupabaseAmazonOrder(supabase, amazonPayload) {
   const normalized = normalizeAmazonOrder(amazonPayload, getConfig());
   const existingOrder = await findSupabaseOrderByAmazonId(supabase, normalized.order.external_order_id);
   const customer = await upsertAmazonCustomer(supabase, normalized.customer);
-  const shippingAddress = await insertAddress(supabase, customer.id, normalized.shippingAddress);
-  const billingAddress = await insertAddress(supabase, customer.id, normalized.billingAddress);
+  const shippingAddress = existingOrder?.shipping_address_id
+    ? { id: existingOrder.shipping_address_id }
+    : await insertAddress(supabase, customer.id, normalized.shippingAddress);
+  const billingAddress = existingOrder?.billing_address_id
+    ? { id: existingOrder.billing_address_id }
+    : await insertAddress(supabase, customer.id, normalized.billingAddress);
   const orderRow = {
     ...normalized.order,
     customer_id: customer.id,
@@ -742,11 +765,14 @@ async function upsertSupabaseAmazonOrder(supabase, amazonPayload) {
   };
   const savedOrder = await supabase.upsert('orders', orderRow, 'source,external_order_id');
 
-  await supabase.insert('order_source_versions', {
-    order_id: savedOrder.id,
-    source: 'amazon',
-    raw_order: normalized.order.raw_order
-  });
+  const rawChanged = !existingOrder || JSON.stringify(existingOrder.raw_order) !== JSON.stringify(normalized.order.raw_order);
+  if (rawChanged) {
+    await supabase.insert('order_source_versions', {
+      order_id: savedOrder.id,
+      source: 'amazon',
+      raw_order: normalized.order.raw_order
+    });
+  }
 
   for (const item of normalized.items) {
     await supabase.upsert('order_items', { ...item, order_id: savedOrder.id }, 'order_id,wix_line_item_id');

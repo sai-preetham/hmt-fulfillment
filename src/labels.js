@@ -41,9 +41,22 @@ export async function fetchShipmentLabelFile(shipment, config) {
     throw new Error(`Delhivery label download failed (${response.status}): ${JSON.stringify(errorPayload)}`);
   }
 
+  const contentType = header(response, 'content-type') || '';
+  let body;
+  let finalContentType = contentType;
+
+  if (contentType.includes('json')) {
+    const payload = await safeJson(response);
+    const { buildDelhiveryShippingLabelPdf } = await import('../lib/crm/shipping-label-pdf.js');
+    body = buildDelhiveryShippingLabelPdf(payload);
+    finalContentType = 'application/pdf';
+  } else {
+    body = Buffer.from(await response.arrayBuffer());
+  }
+
   return {
-    body: await response.arrayBuffer(),
-    contentType: header(response, 'content-type') || 'application/pdf',
+    body,
+    contentType: finalContentType || 'application/pdf',
     filename: `delhivery-label-${shipment.waybill}.pdf`
   };
 }
@@ -86,6 +99,7 @@ function inferFormat(labelUrl, payload, contentType = '') {
   if (contentType.includes('pdf')) return 'pdf';
   if (contentType.includes('html')) return 'html';
   if (String(labelUrl).toLowerCase().includes('.pdf')) return 'pdf';
+  if (!labelUrl && (payload?.packages || payload?.barcode)) return 'pdf';
   return 'url';
 }
 
