@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Wix Delhivery automation every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+AccuracySec=30s
+Unit=wixdelhivery-automation.service
+
+[Install]
+WantedBy=timers.target
