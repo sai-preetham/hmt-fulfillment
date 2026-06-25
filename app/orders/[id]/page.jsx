@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 import { OrderDetailForm } from '@/components/order-detail-form';
+import { OrderContents } from '@/components/order-contents';
 import { PackingForm } from '@/components/packing-form';
 import { ShipmentForm } from '@/components/shipment-form';
 import { StatusPill } from '@/components/status-pill';
@@ -22,7 +23,7 @@ export default async function OrderDetailPage({ params, searchParams }) {
   const canBookShipment = paid && !['cancelled', 'not_paid', 'fulfilled_no_tracking', 'completed'].includes(order.internal_status);
   const communicationOptions = COMMUNICATION_TYPES.filter(([type]) => {
     if (type === 'tracking-link') return Boolean(order.tracking_url || order.awb_number);
-    if (type === 'feedback-request' || type === 'review-request') return ['delivered', 'installation_pending', 'completed', 'fulfilled_no_tracking'].includes(order.internal_status) || order.shipment_status === 'delivered';
+    if (type === 'feedback-request' || type === 'review-request') return ['delivered', 'installation_pending', 'completed', 'fulfilled_no_tracking'].includes(order.internal_status);
     return true;
   });
 
@@ -53,10 +54,21 @@ export default async function OrderDetailPage({ params, searchParams }) {
       ) : null}
 
       <section className="grid metrics">
-        <article className="card metric"><span>Order</span><StatusPill value={order.internal_status} /></article>
-        <article className="card metric"><span>Shipment</span><StatusPill value={order.shipment_status} /></article>
+        <article className="card metric"><span>Status</span><StatusPill value={order.internal_status} /></article>
+        <article className="card metric">
+          <span>Tracking</span>
+          <strong>{order.courier || 'No courier'}</strong>
+          <small>{order.awb_number || 'No AWB'}</small>
+        </article>
         <article className="card metric"><span>Installation</span><StatusPill value={order.installation_status} /></article>
         <article className="card metric"><span>Feedback</span><StatusPill value={order.feedback_status} /></article>
+      </section>
+
+      <section className="panel" style={{ marginTop: 14 }}>
+        <div className="panelHeader"><h2>Order contents</h2></div>
+        <div className="panelBody">
+          <OrderContents order={order} items={detail.items} />
+        </div>
       </section>
 
       <section className="panel" style={{ marginTop: 14 }}>

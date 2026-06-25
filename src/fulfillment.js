@@ -126,6 +126,10 @@ export function buildOrderShipmentSummary(shipment, observedAt = new Date().toIS
     summary.shipment_booked_at = null;
   }
 
+  if (shipment.status === 'delivered') {
+    summary.internal_status = 'installation_pending';
+  }
+
   return summary;
 }
 
@@ -295,4 +299,3 @@ function mapAmazonFulfillmentStatus(status) {
     default: return 'not_fulfilled';
   }
 }
-

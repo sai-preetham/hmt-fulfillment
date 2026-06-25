@@ -5,10 +5,7 @@ import { listOrders } from '@/lib/crm/data';
 export default async function InstallationPage() {
   const orders = (await listOrders({ limit: 150 })).filter(order => {
     const paid = ['PAID', 'APPROVED', 'paid', 'approved'].includes(order.payment_status);
-    return paid && (
-      ['installation_pending', 'issue_reported', 'warranty_case', 'fulfilled_no_tracking'].includes(order.internal_status) ||
-      order.shipment_status === 'delivered'
-    );
+    return paid && ['installation_pending', 'issue_reported', 'warranty_case', 'fulfilled_no_tracking'].includes(order.internal_status);
   });
   return (
     <AppShell>

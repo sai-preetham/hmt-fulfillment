@@ -5,7 +5,7 @@ import { listOrders } from '@/lib/crm/data';
 export default async function FeedbackPage() {
   const orders = (await listOrders({ limit: 150 })).filter(order => {
     const paid = ['PAID', 'APPROVED', 'paid', 'approved'].includes(order.payment_status);
-    const eligibleStatus = ['installation_pending', 'fulfilled_no_tracking', 'completed', 'issue_reported'].includes(order.internal_status) || order.shipment_status === 'delivered';
+    const eligibleStatus = ['installation_pending', 'fulfilled_no_tracking', 'completed', 'issue_reported'].includes(order.internal_status);
     return paid && eligibleStatus && ['feedback_pending', 'positive_feedback', 'negative_feedback', 'review_requested', 'issue_escalated'].includes(order.feedback_status);
   });
   return (

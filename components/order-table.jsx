@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Search } from 'lucide-react';
 import { formatCurrency } from '@/lib/crm/data';
 import { STATUS_FILTERS } from '@/lib/crm/constants';
+import { OrderContents } from './order-contents';
 import { StatusPill } from './status-pill';
 
 export function OrderFilters({ query = '', status = '', source = '' }) {
@@ -49,7 +50,7 @@ export function OrderTable({ orders }) {
             <th>Product</th>
             <th>Value</th>
             <th>Status</th>
-            <th>Shipment</th>
+            <th>Tracking</th>
             <th>Operator</th>
           </tr>
         </thead>
@@ -68,9 +69,8 @@ export function OrderTable({ orders }) {
                 <span className="subtle">{[order.city, order.state, order.pincode].filter(Boolean).join(', ')}</span>
               </td>
               <td>
-                {order.product_variant}
-                <span className="subtle">{order.bike_model}</span>
-                <span className="subtle">Qty {order.quantity}</span>
+                <OrderContents order={order} compact />
+                {order.bike_model ? <span className="subtle">{order.bike_model}</span> : null}
               </td>
               <td>
                 {formatCurrency(order.order_value, order.currency)}
@@ -84,9 +84,9 @@ export function OrderTable({ orders }) {
                 </div>
               </td>
               <td>
-                <StatusPill value={order.shipment_status} />
                 <span className="subtle">{order.courier || 'No courier'}</span>
                 <span className="subtle">{order.awb_number || 'No AWB'}</span>
+                <span className="subtle">{order.tracking_url ? 'Tracking link set' : 'No tracking link'}</span>
               </td>
               <td>
                 {order.assigned_operator || '-'}

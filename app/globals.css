@@ -338,6 +338,28 @@ td {
   gap: 6px;
 }
 
+.orderContents {
+  display: grid;
+  gap: 8px;
+}
+
+.orderContents.compact {
+  gap: 6px;
+}
+
+.orderContentLine {
+  display: grid;
+  gap: 2px;
+}
+
+.orderContentName {
+  font-weight: 650;
+}
+
+.contentsTable {
+  min-width: 640px;
+}
+
 .filters {
   display: grid;
   gap: 10px;

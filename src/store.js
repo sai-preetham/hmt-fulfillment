@@ -392,8 +392,10 @@ async function upsertSupabaseShipment(supabase, record) {
 }
 
 function mergeShipmentUpdate(existing, normalized) {
+  const status = progressedShipmentStatus(existing.status, normalized.status);
   return {
     ...normalized,
+    status,
     order_id: normalized.order_id || existing.order_id,
     legacy_order_id: normalized.legacy_order_id || existing.legacy_order_id,
     order_number: normalized.order_number || existing.order_number,
@@ -409,6 +411,19 @@ function mergeShipmentUpdate(existing, normalized) {
     upload_wbn: normalized.upload_wbn || existing.upload_wbn,
     pickup_location: normalized.pickup_location || existing.pickup_location
   };
+}
+
+function progressedShipmentStatus(current, next) {
+  if (!current) return next;
+  if (!next) return current;
+  if (current === next) return current;
+  if (['delivered', 'rto', 'failed', 'cancelled'].includes(current)) return current;
+
+  const order = ['pending', 'booked', 'pickup_pending', 'picked-up', 'dispatched', 'in-transit', 'out-for-delivery', 'delivered', 'rto', 'failed', 'cancelled'];
+  const currentRank = order.indexOf(current);
+  const nextRank = order.indexOf(next);
+  if (currentRank === -1 || nextRank === -1) return next;
+  return nextRank >= currentRank ? next : current;
 }
 
 async function syncOrderShipmentSummary(supabase, shipment) {
