@@ -36,6 +36,7 @@ export default async function OrderDetailPage({ params, searchParams }) {
         </div>
         <div className="toolbar">
           <Link className="button secondary" href={`/api/crm/orders/${order.id}/invoice`} target="_blank">Generate invoice</Link>
+          <Link className="button secondary" href={`/api/crm/orders/${order.id}/invoice?format=international-label`} target="_blank">10x15 invoice</Link>
           {order.tracking_url ? <Link className="button secondary" href={order.tracking_url} target="_blank">Tracking</Link> : null}
           {chatwootUrl ? <Link className="button" href={chatwootUrl} target="_blank">Open Chatwoot</Link> : <span className="pill neutral">Chatwoot not linked</span>}
         </div>
