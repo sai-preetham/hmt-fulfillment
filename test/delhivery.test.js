@@ -48,6 +48,12 @@ test('maps Wix order to Delhivery create-order payload', () => {
   assert.match(shipment.products_desc, /Shirt SKU-1 x2/);
 });
 
+test('allows a Delhivery order number override for replacement shipments', () => {
+  const payload = mapWixOrderToDelhivery(sampleOrder(), config, { orderNumberOverride: '10034-2' });
+
+  assert.equal(payload.shipments[0].order, '10034-2');
+});
+
 test('uses COD when order is not paid', () => {
   const order = sampleOrder();
   order.paymentStatus = 'NOT_PAID';

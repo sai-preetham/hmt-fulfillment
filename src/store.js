@@ -371,7 +371,9 @@ async function upsertSupabaseShipment(supabase, record) {
   const normalized = normalizeShipmentRecord(record);
   const existing = record.id
     ? await findSupabaseShipmentById(supabase, record.id)
-    : await findLatestSupabaseShipment(supabase, record.orderId);
+    : record.createNewShipment
+      ? null
+      : await findLatestSupabaseShipment(supabase, record.orderId);
   const before = existing || null;
   const shipmentRow = existing ? mergeShipmentUpdate(existing, normalized) : normalized;
   const nextRecord = existing

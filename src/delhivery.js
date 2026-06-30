@@ -13,7 +13,7 @@ export function mapWixOrderToDelhivery(order, config, options = {}) {
   const totalAmount = amount(order?.priceSummary?.total?.amount) || sumLineItems(items);
   const paymentMode = options.reverse ? 'Pickup' : inferPaymentMode(order, config);
   const codAmount = paymentMode === 'COD' ? totalAmount : 0;
-  const orderId = order?.number ? `${order.number}` : `${order?.id}`;
+  const orderId = options.orderNumberOverride || (order?.number ? `${order.number}` : `${order?.id}`);
   validateSupportedDestination(address);
 
   const shipment = removeEmpty({
@@ -394,7 +394,7 @@ export function mapAmazonOrderToDelhivery(amazonPayload, config, options = {}) {
   const totalAmount = Number(order?.OrderTotal?.Amount || 0);
   const paymentMode = 'Prepaid';
   const codAmount = 0;
-  const orderId = order?.AmazonOrderId || '';
+  const orderId = options.orderNumberOverride || order?.AmazonOrderId || '';
 
   const streetAddress = [address?.AddressLine1 || '', address?.AddressLine2 || ''].filter(Boolean).join(', ');
 
@@ -436,4 +436,3 @@ export function mapAmazonOrderToDelhivery(amazonPayload, config, options = {}) {
     }
   };
 }
-

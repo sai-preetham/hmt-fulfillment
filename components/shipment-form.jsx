@@ -13,15 +13,23 @@ export function ShipmentForm({ order }) {
   const selectedBookingCourier = BOOKING_COURIERS.find(item => item.code === courier);
   const services = selectedBookingCourier?.services || [];
   const canGenerateLabel = Boolean(labelUrl || awbNumber);
+  const hasExistingShipment = Boolean(order.awb_number || order.shipment_status === 'shipment_booked');
 
   async function submit(event) {
     event.preventDefault();
-    setBusy(true);
     setMessage('');
     const submitter = event.nativeEvent.submitter;
     const form = new FormData(event.currentTarget);
     const body = Object.fromEntries(form.entries());
     if (submitter?.name) body[submitter.name] = submitter.value;
+    if (body.booking_action === 'book_courier' && hasExistingShipment) {
+      const confirmed = window.confirm(
+        `This order already has a booked shipment${order.awb_number ? ` (${order.awb_number})` : ''}. Book another shipment with a new Delhivery order number?`
+      );
+      if (!confirmed) return;
+      body.allow_multiple_shipments = 'true';
+    }
+    setBusy(true);
     const response = await fetch(`/api/crm/orders/${order.id}/shipment`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

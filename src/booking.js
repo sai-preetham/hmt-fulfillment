@@ -8,7 +8,7 @@ export async function bookWixOrder(order, config, metadata = {}) {
   if (!orderId) throw new Error('Order is missing id/number.');
 
   const existing = await findShipmentByOrderId(String(orderId));
-  if (existing?.status === 'booked') {
+  if (existing?.status === 'booked' && !metadata.allowMultipleShipments) {
     return { shipment: existing, skipped: true };
   }
 
@@ -17,13 +17,15 @@ export async function bookWixOrder(order, config, metadata = {}) {
   const courier = getCourierAdapter(metadata.courierCode || 'delhivery');
   const payload = courier.mapOrder(order, bookingConfig, {
     internationalService: metadata.internationalService,
-    reverse: metadata.reverse
+    reverse: metadata.reverse,
+    orderNumberOverride: metadata.orderNumberOverride
   });
   const pending = await upsertShipment({
     ...metadata,
+    createNewShipment: metadata.allowMultipleShipments,
     dbOrderId: persistedOrder?.id,
     orderId: String(orderId),
-    orderNumber: order?.number || '',
+    orderNumber: payload.shipments?.[0]?.order || metadata.orderNumberOverride || order?.number || '',
     courierCode: courier.code,
     status: bookingConfig.createAwbOnBook ? 'pending' : 'pending-zone',
     requestPayload: payload
@@ -155,7 +157,7 @@ export async function bookAmazonOrder(order, config, metadata = {}) {
   if (!orderId) throw new Error('Amazon order is missing AmazonOrderId.');
 
   const existing = await findShipmentByOrderId(String(orderId));
-  if (existing?.status === 'booked') {
+  if (existing?.status === 'booked' && !metadata.allowMultipleShipments) {
     return { shipment: existing, skipped: true };
   }
 
@@ -164,13 +166,15 @@ export async function bookAmazonOrder(order, config, metadata = {}) {
   const courier = getCourierAdapter(metadata.courierCode || 'delhivery');
   const payload = courier.mapOrder(order, bookingConfig, {
     internationalService: metadata.internationalService,
-    reverse: metadata.reverse
+    reverse: metadata.reverse,
+    orderNumberOverride: metadata.orderNumberOverride
   });
   const pending = await upsertShipment({
     ...metadata,
+    createNewShipment: metadata.allowMultipleShipments,
     dbOrderId: persistedOrder?.id,
     orderId: String(orderId),
-    orderNumber: orderId,
+    orderNumber: payload.shipments?.[0]?.order || metadata.orderNumberOverride || orderId,
     courierCode: courier.code,
     status: bookingConfig.createAwbOnBook ? 'pending' : 'pending-zone',
     requestPayload: payload
