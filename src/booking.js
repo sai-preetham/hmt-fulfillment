@@ -44,7 +44,7 @@ export async function bookWixOrder(order, config, metadata = {}) {
     };
   }
 
-  if (payload.flow === 'international') {
+  if (payload.flow === 'international' && courier.code !== 'fedex') {
     const queued = await upsertShipment({
       ...pending,
       status: 'pending-international',
@@ -132,9 +132,11 @@ function normalizeShippingMode(value) {
 
 function extractWaybill(response) {
   return (
+    response?.waybill ||
+    response?.output?.transactionShipments?.[0]?.masterTrackingNumber ||
+    response?.output?.transactionShipments?.[0]?.pieceResponses?.[0]?.trackingNumber ||
     response?.packages?.[0]?.waybill ||
     response?.packages?.[0]?.waybill_number ||
-    response?.waybill ||
     response?.upload_wbn ||
     ''
   );
@@ -143,7 +145,7 @@ function extractWaybill(response) {
 function normalizeShipmentForWix(shipment) {
   return {
     waybill: shipment.waybill,
-    courier_code: shipment.source || 'delhivery',
+    courier_code: shipment.source || shipment.courierCode || 'delhivery',
     courier_service_code: shipment.shippingMode === 'S' ? 'surface' : 'express',
     service_mode:
       shipment.service_mode ||

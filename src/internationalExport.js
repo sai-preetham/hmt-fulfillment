@@ -9,6 +9,89 @@ export function buildInternationalShipmentWorkbook(orders, config) {
   return createXlsxWorkbook('Sample Sheet', sheetRows);
 }
 
+export function buildFedexBatchUploadWorkbook(orders, config = {}) {
+  const rows = orders.map(order => buildFedexBatchUploadRow(order, config));
+  const sheetRows = [
+    FEDEX_BATCH_UPLOAD_HEADERS,
+    ...rows.map(row => FEDEX_BATCH_UPLOAD_HEADERS.map(header => row[header] ?? ''))
+  ];
+
+  return createXlsxWorkbook('Overview', sheetRows);
+}
+
+export function buildFedexBatchUploadRow(order, config = {}) {
+  const raw = order.raw_order || {};
+  const destination = raw?.shippingInfo?.logistics?.shippingDestination || {};
+  const rawAddress = destination.address || {};
+  const rawContact = destination.contactDetails || {};
+  const address = order.shipping_address || {};
+  const customer = order.customers || {};
+  const payload = order.fedex_payload || {};
+  const items = raw.lineItems || [];
+  const defaults = config.defaults || {};
+  const fedexSender = fedexSenderDefaults(config);
+  const exportItem = holdMyThrottleItem(items);
+  const packageWeightGrams = payload.weightGrams || order.package_weight_grams || defaults.internationalWeightGrams || defaults.weightGrams || 400;
+  const packageWeightKg = roundTo(Number(packageWeightGrams || 0) / 1000, 3);
+  const itemWeight = payload.itemWeightKg || packageWeightKg || '';
+  const declaredValue = payload.declaredValue || order.total_amount || moneyAmount(raw?.priceSummary?.total?.amount || raw?.priceSummary?.totalPrice?.amount) || '';
+  const recipientName = payload.customerName || address.name || contactName(rawContact) || customer.name || '';
+  const recipientLine1 = payload.addressLine1 || address.address_line1 || rawAddress.addressLine || formatStreetAddress(rawAddress.streetAddress) || '';
+  const recipientLine2 = payload.addressLine2 || address.address_line2 || rawAddress.addressLine2 || '';
+  const recipientCountry = payload.country || address.country || rawAddress.country || '';
+  const recipientEmail = payload.email || customer.email || raw?.buyerInfo?.email || '';
+  const productDescription =
+    payload.itemDescription ||
+    defaults.internationalProductDescription ||
+    itemName(exportItem) ||
+    'Hold My Throttle';
+
+  return {
+    serviceType: payload.serviceType || 'FEDEX_INTERNATIONAL_PRIORITY',
+    shipmentType: payload.shipmentType || 'OUTBOUND',
+    source: payload.source || 'MANUAL',
+    senderContactName: payload.senderContactName || fedexSender.contactName,
+    senderCompany: payload.senderCompany || fedexSender.company,
+    senderContactNumber: payload.senderContactNumber || fedexSender.contactNumber,
+    senderLine1: payload.senderLine1 || fedexSender.line1,
+    senderLine2: payload.senderLine2 || fedexSender.line2,
+    senderPostcode: payload.senderPostcode || fedexSender.postcode,
+    senderCity: payload.senderCity || fedexSender.city,
+    senderState: payload.senderState || fedexSender.state,
+    senderCountry: payload.senderCountry || fedexSender.country,
+    senderEmail: payload.senderEmail || fedexSender.email,
+    recipientContactName: recipientName,
+    recipientCompany: payload.recipientCompany || '',
+    recipientContactNumber: payload.phone || address.phone || customer.phone || rawContact.phone || '',
+    recipientLine1,
+    recipientLine2,
+    recipientPostcode: payload.postalCode || address.postal_code || rawAddress.postalCode || '',
+    recipientCity: payload.city || address.city || rawAddress.city || '',
+    recipientState: payload.state || address.state || stateProvinceCode(rawAddress.subdivision || rawAddress.subdivisionFullname || ''),
+    recipientCountry,
+    recipientEmail,
+    numberOfPackages: payload.numberOfPackages || 1,
+    packageWeight: payload.packageWeight || packageWeightKg || '',
+    weightUnits: payload.weightUnits || 'KGS',
+    length: payload.lengthCm || order.package_length_cm || defaults.internationalLengthCm || defaults.lengthCm || 24,
+    width: payload.widthCm || order.package_width_cm || defaults.internationalWidthCm || defaults.widthCm || 15,
+    height: payload.heightCm || order.package_height_cm || defaults.internationalHeightCm || defaults.heightCm || 6,
+    etdEnabled: payload.etdEnabled || 'Y',
+    baseRate: payload.baseRate || '',
+    packageType: payload.packageType || 'YOUR_PACKAGING',
+    currencyType: payload.currencyType || order.currency || raw.currency || 'INR',
+    commodityType: payload.commodityType || 'ITEMS',
+    itemDescription: productDescription,
+    manufacturingCountry: payload.manufacturingCountry || 'IN',
+    commodityQuantity: payload.commodityQuantity || 1,
+    commodityMeasureUnit: payload.commodityMeasureUnit || 'BOX',
+    commodityWeight: payload.commodityWeight || itemWeight,
+    customsValue: payload.customsValue || declaredValue,
+    purposeOfShipment: fedexPurpose(payload.purposeOfShipment || defaults.internationalShipmentType || defaults.internationalPurposeOfBooking),
+    generateInvoice: payload.generateInvoice || 'UP'
+  };
+}
+
 export function buildInternationalShipmentRow(order, config) {
   const raw = order.raw_order || {};
   const destination = raw?.shippingInfo?.logistics?.shippingDestination || {};
@@ -82,6 +165,10 @@ export function internationalExportFilename(orders) {
     return `international-shipment-${safeFilenamePart(orders[0].order_number || orders[0].wix_order_id || date)}.xlsx`;
   }
   return `international-shipments-${date}.xlsx`;
+}
+
+export function fedexBatchUploadFilename(batchNumber) {
+  return `${safeFilenamePart(batchNumber || `fedex-${new Date().toISOString().slice(0, 10)}`)}.xlsx`;
 }
 
 function createXlsxWorkbook(sheetName, rows) {
@@ -297,6 +384,30 @@ function stateProvinceCode(value) {
   return String(value || '').replace(/^[A-Z]{2}-/, '');
 }
 
+function fedexSenderDefaults(config = {}) {
+  const fedex = config.fedex?.sender || {};
+  return {
+    contactName: fedex.contactName || process.env.FEDEX_SENDER_CONTACT_NAME || 'Sai Preetham',
+    company: fedex.company || process.env.FEDEX_SENDER_COMPANY || 'BYKR TECH PRIVATE LIMITED',
+    contactNumber: fedex.contactNumber || process.env.FEDEX_SENDER_CONTACT_NUMBER || '8904137604',
+    line1: fedex.line1 || process.env.FEDEX_SENDER_LINE1 || '815, 23rd Cross Rd',
+    line2: fedex.line2 || process.env.FEDEX_SENDER_LINE2 || '7th Sector, HSR Layout',
+    postcode: fedex.postcode || process.env.FEDEX_SENDER_POSTCODE || '560102',
+    city: fedex.city || process.env.FEDEX_SENDER_CITY || 'Bengaluru',
+    state: fedex.state || process.env.FEDEX_SENDER_STATE || 'KA',
+    country: fedex.country || process.env.FEDEX_SENDER_COUNTRY || 'IN',
+    email: fedex.email || process.env.FEDEX_SENDER_EMAIL || 'sai@bykr.co'
+  };
+}
+
+function fedexPurpose(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized.includes('sample')) return 'SAMPLE';
+  if (normalized.includes('gift')) return 'GIFT';
+  if (normalized.includes('return')) return 'RETURN_AND_REPAIR';
+  return 'SOLD';
+}
+
 function escapeXml(value) {
   return String(value).replace(/[<>&'"]/g, char => {
     const entities = { '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' };
@@ -352,4 +463,49 @@ export const INTERNATIONAL_EXPORT_HEADERS = [
   'HSN Code',
   'HTS Code',
   'Product ID'
+];
+
+export const FEDEX_BATCH_UPLOAD_HEADERS = [
+  'serviceType',
+  'shipmentType',
+  'source',
+  'senderContactName',
+  'senderCompany',
+  'senderContactNumber',
+  'senderLine1',
+  'senderLine2',
+  'senderPostcode',
+  'senderCity',
+  'senderState',
+  'senderCountry',
+  'senderEmail',
+  'recipientContactName',
+  'recipientCompany',
+  'recipientContactNumber',
+  'recipientLine1',
+  'recipientLine2',
+  'recipientPostcode',
+  'recipientCity',
+  'recipientState',
+  'recipientCountry',
+  'recipientEmail',
+  'numberOfPackages',
+  'packageWeight',
+  'weightUnits',
+  'length',
+  'width',
+  'height',
+  'etdEnabled',
+  'baseRate',
+  'packageType',
+  'currencyType',
+  'commodityType',
+  'itemDescription',
+  'manufacturingCountry',
+  'commodityQuantity',
+  'commodityMeasureUnit',
+  'commodityWeight',
+  'customsValue',
+  'purposeOfShipment',
+  'generateInvoice'
 ];

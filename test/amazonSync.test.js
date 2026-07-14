@@ -24,9 +24,6 @@ test('runs Amazon sync in mock/demo mode when credentials are missing', async ()
     if (String(url).includes('/rest/v1/orders') && options.method === 'POST') {
       return jsonResponse({ id: 'order-1', external_order_id: 'AMZ-mock' });
     }
-    if (String(url).includes('/rest/v1/order_source_versions') && options.method === 'POST') {
-      return jsonResponse({ id: 'os-1' });
-    }
     if (String(url).includes('/rest/v1/order_items') && options.method === 'POST') {
       return jsonResponse({ id: 'item-1' });
     }

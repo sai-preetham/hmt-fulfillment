@@ -49,6 +49,7 @@ export function OrderTable({ orders }) {
             <th>Customer</th>
             <th>Product</th>
             <th>Value</th>
+            <th>Wix</th>
             <th>Status</th>
             <th>Tracking</th>
             <th>Operator</th>
@@ -78,6 +79,13 @@ export function OrderTable({ orders }) {
               </td>
               <td>
                 <div className="statusStack">
+                  <StatusPill value={order.fulfillment_status || 'not_fulfilled'} />
+                  {order.wix_fulfillment_status ? <StatusPill value={order.wix_fulfillment_status} /> : null}
+                </div>
+                {order.wix_fulfillment_error ? <span className="subtle dangerText">{order.wix_fulfillment_error}</span> : null}
+              </td>
+              <td>
+                <div className="statusStack">
                   <StatusPill value={order.internal_status} />
                   <StatusPill value={order.installation_status} />
                   <StatusPill value={order.feedback_status} />
@@ -96,7 +104,7 @@ export function OrderTable({ orders }) {
           ))}
           {!orders.length && (
             <tr>
-              <td colSpan="7" className="empty">No matching orders.</td>
+              <td colSpan="8" className="empty">No matching orders.</td>
             </tr>
           )}
         </tbody>

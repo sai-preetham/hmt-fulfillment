@@ -179,6 +179,8 @@ export function createDelhiveryTrackingSync(config, options = {}) {
     lastPolled: 0,   // shipments checked
     lastUpdated: 0,  // shipments whose status changed
     lastEvents: 0,   // new scan events saved
+    lastFailedBatches: 0,
+    lastWarnings: [],
     nextRunAt: null
   };
 
@@ -209,6 +211,8 @@ export function createDelhiveryTrackingSync(config, options = {}) {
     state.lastPolled = 0;
     state.lastUpdated = 0;
     state.lastEvents = 0;
+    state.lastFailedBatches = 0;
+    state.lastWarnings = [];
 
     try {
       await runTrackingPass(config, state, logger);
@@ -286,7 +290,10 @@ async function pollCourierTracking(courierCode, activeShipments, batchSize, conf
     try {
       trackingMap = await fetchCourierTracking(courierCode, waybills, config);
     } catch (error) {
-      logger.error?.(`${courierCode} tracking batch failed: ${error.message}`);
+      state.lastFailedBatches += 1;
+      const warning = `${courierCode} tracking batch failed: ${error.message}`;
+      state.lastWarnings.push(warning);
+      logger.error?.(warning);
       continue; // skip this batch, try the next
     }
 

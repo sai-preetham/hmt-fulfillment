@@ -35,8 +35,14 @@ export function CrmSettingsForm({ settings, supabaseConfigured }) {
       {!supabaseConfigured ? <p className="muted">Supabase is not configured, so changes will validate but not persist.</p> : null}
 
       <section className="panel">
-        <div className="panelHeader"><h2>Package defaults</h2></div>
+        <div className="panelHeader">
+          <div>
+            <h2>Default packaging</h2>
+            <p className="muted settingsHint">Pre-filled whenever an operator books a new shipment.</p>
+          </div>
+        </div>
         <div className="panelBody formGrid">
+          <h3 className="formSection">Domestic shipments</h3>
           <label>
             <span>Domestic weight (grams)</span>
             <input name="domestic_weight_grams" type="number" defaultValue={shipment.domestic.weightGrams} />
@@ -51,8 +57,9 @@ export function CrmSettingsForm({ settings, supabaseConfigured }) {
           </label>
           <label>
             <span>Domestic height (cm)</span>
-            <input name="domestic_height_cm" type="number" defaultValue={shipment.domestic.heightCm} />
+            <input name="domestic_height_cm" type="number" min="0.1" step="0.1" defaultValue={shipment.domestic.heightCm} />
           </label>
+          <h3 className="formSection">International shipments</h3>
           <label>
             <span>International weight (grams)</span>
             <input name="international_weight_grams" type="number" defaultValue={shipment.international.weightGrams} />

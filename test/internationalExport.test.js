@@ -3,7 +3,11 @@ import test from 'node:test';
 import {
   buildInternationalShipmentRow,
   buildInternationalShipmentWorkbook,
+  buildFedexBatchUploadRow,
+  buildFedexBatchUploadWorkbook,
+  FEDEX_BATCH_UPLOAD_HEADERS,
   INTERNATIONAL_EXPORT_HEADERS,
+  fedexBatchUploadFilename,
   internationalExportFilename
 } from '../src/internationalExport.js';
 
@@ -96,6 +100,117 @@ test('builds Excel-compatible workbook for international shipment upload', () =>
 
 test('uses xlsx extension for international export filenames', () => {
   assert.equal(internationalExportFilename([sampleInternationalOrder()]), 'international-shipment-2001.xlsx');
+});
+
+test('includes FedEx.com batch upload headers from sample workbook', () => {
+  assert.deepEqual(FEDEX_BATCH_UPLOAD_HEADERS, [
+    'serviceType',
+    'shipmentType',
+    'source',
+    'senderContactName',
+    'senderCompany',
+    'senderContactNumber',
+    'senderLine1',
+    'senderLine2',
+    'senderPostcode',
+    'senderCity',
+    'senderState',
+    'senderCountry',
+    'senderEmail',
+    'recipientContactName',
+    'recipientCompany',
+    'recipientContactNumber',
+    'recipientLine1',
+    'recipientLine2',
+    'recipientPostcode',
+    'recipientCity',
+    'recipientState',
+    'recipientCountry',
+    'recipientEmail',
+    'numberOfPackages',
+    'packageWeight',
+    'weightUnits',
+    'length',
+    'width',
+    'height',
+    'etdEnabled',
+    'baseRate',
+    'packageType',
+    'currencyType',
+    'commodityType',
+    'itemDescription',
+    'manufacturingCountry',
+    'commodityQuantity',
+    'commodityMeasureUnit',
+    'commodityWeight',
+    'customsValue',
+    'purposeOfShipment',
+    'generateInvoice'
+  ]);
+});
+
+test('builds FedEx.com batch upload row from queued international order', () => {
+  const order = {
+    ...sampleInternationalOrder(),
+    fedex_payload: {
+      customerName: 'Grace Hopper',
+      phone: '15055550199',
+      addressLine1: '2523 Claremont Court Northeast',
+      addressLine2: '',
+      city: 'ALBUQUERQUE',
+      state: 'NM',
+      postalCode: '87112',
+      country: 'US',
+      weightGrams: 400,
+      lengthCm: 24,
+      widthCm: 16,
+      heightCm: 7,
+      declaredValue: 15999
+    }
+  };
+
+  const row = buildFedexBatchUploadRow(order, sampleConfig());
+
+  assert.equal(row.serviceType, 'FEDEX_INTERNATIONAL_PRIORITY');
+  assert.equal(row.shipmentType, 'OUTBOUND');
+  assert.equal(row.source, 'MANUAL');
+  assert.equal(row.senderContactName, 'Sai Preetham');
+  assert.equal(row.senderCompany, 'BYKR TECH PRIVATE LIMITED');
+  assert.equal(row.senderLine1, '815, 23rd Cross Rd');
+  assert.equal(row.senderLine2, '7th Sector, HSR Layout');
+  assert.equal(row.senderEmail, 'sai@bykr.co');
+  assert.equal(row.senderCountry, 'IN');
+  assert.equal(row.recipientContactName, 'Grace Hopper');
+  assert.equal(row.recipientState, 'NM');
+  assert.equal(row.recipientCountry, 'US');
+  assert.equal(row.packageWeight, 0.4);
+  assert.equal(row.length, 24);
+  assert.equal(row.width, 16);
+  assert.equal(row.height, 7);
+  assert.equal(row.packageType, 'YOUR_PACKAGING');
+  assert.equal(row.currencyType, 'USD');
+  assert.equal(row.itemDescription, 'Hold My Throttle');
+  assert.equal(row.manufacturingCountry, 'IN');
+  assert.equal(row.commodityMeasureUnit, 'BOX');
+  assert.equal(row.customsValue, 15999);
+  assert.equal(row.purposeOfShipment, 'SOLD');
+  assert.equal(row.generateInvoice, 'UP');
+});
+
+test('builds Excel-compatible workbook for FedEx.com batch upload', () => {
+  const workbook = buildFedexBatchUploadWorkbook([sampleInternationalOrder()], sampleConfig());
+  const workbookText = workbook.toString('utf8');
+
+  assert.equal(workbook.subarray(0, 2).toString('utf8'), 'PK');
+  assert.match(workbookText, /Overview/);
+  assert.match(workbookText, /serviceType/);
+  assert.match(workbookText, /FEDEX_INTERNATIONAL_PRIORITY/);
+  assert.match(workbookText, /Ada Lovelace/);
+  assert.match(workbookText, /YOUR_PACKAGING/);
+});
+
+test('uses xlsx extension for FedEx batch upload filenames', () => {
+  assert.equal(fedexBatchUploadFilename('fedex-2026-07-14-123'), 'fedex-2026-07-14-123.xlsx');
 });
 
 function sampleInternationalOrder() {

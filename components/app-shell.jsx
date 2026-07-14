@@ -4,6 +4,7 @@ import {
   Boxes,
   CheckSquare,
   ClipboardList,
+  Cog,
   Gauge,
   LogOut,
   MessageCircle,
@@ -24,6 +25,7 @@ const nav = [
   ['/installation', 'Installation', Wrench],
   ['/feedback', 'Feedback', MessageCircle],
   ['/tasks', 'Tasks', CheckSquare],
+  ['/automation', 'Automation', Cog],
   ['/integration-errors', 'Integration Errors', AlertTriangle],
   ['/settings', 'Settings', Settings]
 ];

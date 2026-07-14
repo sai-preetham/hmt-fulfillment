@@ -84,3 +84,50 @@ test('fetches Shiprocket tracking by AWB with bearer auth', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test('refreshes Shiprocket token after configured token is rejected', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, options });
+    if (String(url).endsWith('/courier/track/awb/AWB123') && requests.length === 1) {
+      return new Response(JSON.stringify({ message: 'unauthorized request' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    if (String(url).endsWith('/auth/login')) {
+      return new Response(JSON.stringify({ token: 'fresh-token' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    return new Response(
+      JSON.stringify({
+        tracking_data: {
+          shipment_status: 'Delivered',
+          shipment_track_activities: []
+        }
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  };
+
+  try {
+    const result = await fetchShiprocketTracking(['AWB123'], {
+      shiprocket: {
+        baseUrl: 'https://apiv2.shiprocket.in/v1/external',
+        token: 'expired-token',
+        email: 'ops@example.com',
+        password: 'secret'
+      }
+    });
+
+    assert.equal(requests.length, 3);
+    assert.equal(requests[0].options.headers.Authorization, 'Bearer expired-token');
+    assert.equal(requests[2].options.headers.Authorization, 'Bearer fresh-token');
+    assert.equal(result.get('AWB123').shipment_status, 'Delivered');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

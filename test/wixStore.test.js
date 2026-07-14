@@ -112,56 +112,9 @@ test('Wix resync preserves CRM-edited addresses and buyer GST', async () => {
   assert.equal(addressWrites.length, 0);
 });
 
-test('Wix resync skips unchanged source version append', async () => {
+test('Wix fulfilled orders without tracking are marked fulfilled in CRM status', async () => {
   process.env.SUPABASE_URL = 'https://example.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
-
-  const wixOrder = {
-    id: 'wix-order-unchanged',
-    number: 10367,
-    paymentStatus: 'PAID',
-    fulfillmentStatus: 'NOT_FULFILLED',
-    currency: 'INR',
-    buyerInfo: {
-      contactId: 'wix-contact-unchanged',
-      email: 'buyer@example.com'
-    },
-    billingInfo: {
-      contactDetails: {
-        firstName: 'Same',
-        lastName: 'Buyer',
-        phone: '+91 2222222222'
-      },
-      address: {
-        addressLine: 'Same billing address',
-        city: 'Same City',
-        country: 'IN'
-      }
-    },
-    shippingInfo: {
-      logistics: {
-        shippingDestination: {
-          contactDetails: {
-            firstName: 'Same',
-            lastName: 'Buyer',
-            phone: '+91 2222222222'
-          },
-          address: {
-            addressLine: 'Same shipping address',
-            city: 'Same City',
-            country: 'IN'
-          }
-        }
-      }
-    },
-    priceSummary: {
-      total: { amount: '1000.00' }
-    },
-    balanceSummary: {
-      paid: { amount: '1000.00' }
-    },
-    lineItems: []
-  };
 
   const requests = [];
   globalThis.fetch = async (url, options = {}) => {
@@ -173,12 +126,15 @@ test('Wix resync skips unchanged source version append', async () => {
     if (table === 'orders' && options.method === 'GET') {
       return jsonResponse([
         {
-          id: 'order-unchanged',
-          wix_order_id: 'wix-order-unchanged',
-          customer_id: 'customer-unchanged',
-          shipping_address_id: 'ship-unchanged',
-          billing_address_id: 'bill-unchanged',
-          raw_order: wixOrder
+          id: 'order-fulfilled',
+          wix_order_id: 'wix-order-fulfilled',
+          customer_id: 'customer-fulfilled',
+          shipping_address_id: 'ship-fulfilled',
+          billing_address_id: 'bill-fulfilled',
+          internal_status: 'awaiting_packing',
+          shipment_status: 'not_booked',
+          shipment_waybill: null,
+          awb_number: null
         }
       ]);
     }
@@ -186,31 +142,68 @@ test('Wix resync skips unchanged source version append', async () => {
     if (table === 'customers' && options.method === 'GET') {
       return jsonResponse([
         {
-          id: 'customer-unchanged',
-          wix_contact_id: 'wix-contact-unchanged',
-          name: 'Same Buyer',
-          email: 'buyer@example.com',
-          phone: '+91 2222222222'
+          id: 'customer-fulfilled',
+          wix_contact_id: 'wix-contact-fulfilled',
+          name: 'Fulfilled Buyer',
+          email: 'fulfilled@example.com',
+          phone: '+91 3333333333'
         }
       ]);
     }
 
     if (table === 'customers' && options.method === 'PATCH') {
-      return jsonResponse([{ id: 'customer-unchanged', ...body }]);
+      return jsonResponse([{ id: 'customer-fulfilled', ...body }]);
     }
 
     if (table === 'orders' && options.method === 'POST') {
-      return jsonResponse([{ id: 'order-unchanged', ...body }]);
+      return jsonResponse([{ id: 'order-fulfilled', ...body }]);
     }
 
     return jsonResponse([{ id: `${table}-row`, ...body }]);
   };
 
-  const { upsertWixOrders } = await import(`../src/store.js?skip-source-version-${Date.now()}`);
-  await upsertWixOrders([wixOrder]);
+  const { upsertWixOrders } = await import(`../src/store.js?fulfilled-crm-${Date.now()}`);
+  await upsertWixOrders([
+    {
+      id: 'wix-order-fulfilled',
+      number: 10368,
+      paymentStatus: 'PAID',
+      fulfillmentStatus: 'FULFILLED',
+      currency: 'INR',
+      buyerInfo: {
+        contactId: 'wix-contact-fulfilled',
+        email: 'fulfilled@example.com'
+      },
+      shippingInfo: {
+        logistics: {
+          shippingDestination: {
+            contactDetails: {
+              firstName: 'Fulfilled',
+              lastName: 'Buyer',
+              phone: '+91 3333333333'
+            },
+            address: {
+              addressLine: 'Fulfilled shipping address',
+              city: 'Bengaluru',
+              country: 'IN'
+            }
+          }
+        }
+      },
+      priceSummary: {
+        total: { amount: '1000.00' }
+      },
+      balanceSummary: {
+        paid: { amount: '1000.00' }
+      },
+      lineItems: []
+    }
+  ]);
 
-  const sourceVersionWrites = requests.filter(request => request.table === 'order_source_versions');
-  assert.equal(sourceVersionWrites.length, 0);
+  const orderUpsert = requests.find(request => request.table === 'orders' && request.method === 'POST');
+  assert.equal(orderUpsert.body.fulfillment_status, 'FULFILLED');
+  assert.equal(orderUpsert.body.internal_status, 'fulfilled_no_tracking');
+  assert.equal(orderUpsert.body.shipment_status, 'not_booked');
 });
 
 function jsonResponse(payload, status = 200) {

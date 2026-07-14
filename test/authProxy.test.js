@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isAuthRequired, isLocalAuthBypassAllowed } from '../lib/auth-guard.js';
+import { isAuthRequired, isAutomationAuthBypassAllowed, isLocalAuthBypassAllowed } from '../lib/auth-guard.js';
 
-function requestFor(hostname) {
+function requestFor(hostname, pathname = '/', authorization = '') {
   return {
     nextUrl: {
-      hostname
-    }
+      hostname,
+      pathname
+    },
+    headers: new Headers(authorization ? { authorization } : {})
   };
 }
 
@@ -28,4 +30,12 @@ test('localhost auth bypass is disabled in production', () => {
 
 test('localhost auth bypass remains available in development', () => {
   assert.equal(isLocalAuthBypassAllowed(requestFor('localhost'), { NODE_ENV: 'development' }), true);
+});
+
+test('automation bearer bypass is limited to protected automation APIs', () => {
+  const env = { AUTOMATION_SECRET: 'secret-1' };
+  assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/api/automation/run', 'Bearer secret-1'), env), true);
+  assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/api/tracking/sync', 'Bearer secret-1'), env), true);
+  assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/api/automation/run', 'Bearer wrong'), env), false);
+  assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/orders', 'Bearer secret-1'), env), false);
 });

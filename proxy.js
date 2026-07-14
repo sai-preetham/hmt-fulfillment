@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { isAuthRequired, isLocalAuthBypassAllowed } from './lib/auth-guard.js';
+import { isAuthRequired, isAutomationAuthBypassAllowed, isLocalAuthBypassAllowed } from './lib/auth-guard.js';
 
 export async function proxy(request) {
   const authRequired = isAuthRequired();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 
-  if (!authRequired || isLocalAuthBypassAllowed(request)) return NextResponse.next();
+  if (!authRequired || isLocalAuthBypassAllowed(request) || isAutomationAuthBypassAllowed(request)) return NextResponse.next();
 
   if (!url || !anonKey) {
     if (request.nextUrl.pathname.startsWith('/login')) return NextResponse.next();

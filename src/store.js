@@ -377,11 +377,11 @@ async function upsertSupabaseShipment(supabase, record) {
   const before = existing || null;
   const shipmentRow = existing ? mergeShipmentUpdate(existing, normalized) : normalized;
   const nextRecord = existing
-    ? await supabase.patch('shipments', `id=eq.${existing.id}`, {
+    ? await writeSupabaseShipment(supabase, 'patch', `id=eq.${existing.id}`, {
         ...shipmentRow,
         updated_at: new Date().toISOString()
       })
-    : await supabase.insert('shipments', shipmentRow);
+    : await writeSupabaseShipment(supabase, 'insert', '', shipmentRow);
 
   await writeAudit(supabase, 'shipments', nextRecord.id, existing ? 'update' : 'insert', before, nextRecord, 'shipment upsert');
   await syncOrderShipmentSummary(supabase, nextRecord);
@@ -411,7 +411,10 @@ function mergeShipmentUpdate(existing, normalized) {
     carrier_response: normalized.carrier_response || existing.carrier_response,
     waybill: normalized.waybill || existing.waybill,
     upload_wbn: normalized.upload_wbn || existing.upload_wbn,
-    pickup_location: normalized.pickup_location || existing.pickup_location
+    pickup_location: normalized.pickup_location || existing.pickup_location,
+    label_url: normalized.label_url || existing.label_url,
+    label_format: normalized.label_format || existing.label_format,
+    label_error: normalized.label_error || existing.label_error
   };
 }
 
@@ -445,21 +448,13 @@ async function upsertSupabaseWixOrder(supabase, order) {
     : await insertAddress(supabase, customer.id, normalized.billingAddress);
   const orderRow = {
     ...normalized.order,
+    ...buildWixCrmStatusPatch(existingOrder, normalized.order),
     customer_id: customer.id,
     shipping_address_id: shippingAddress?.id || null,
     billing_address_id: billingAddress?.id || null,
     updated_at: new Date().toISOString()
   };
   const savedOrder = await supabase.upsert('orders', orderRow, 'wix_order_id');
-
-  const rawChanged = !existingOrder || JSON.stringify(existingOrder.raw_order) !== JSON.stringify(normalized.order.raw_order);
-  if (rawChanged) {
-    await supabase.insert('order_source_versions', {
-      order_id: savedOrder.id,
-      source: 'wix',
-      raw_order: normalized.order.raw_order
-    });
-  }
 
   for (const item of normalized.items) {
     await supabase.upsert('order_items', { ...item, order_id: savedOrder.id }, 'order_id,wix_line_item_id');
@@ -490,6 +485,47 @@ async function upsertSupabaseWixOrder(supabase, order) {
   return savedOrder;
 }
 
+function buildWixCrmStatusPatch(existingOrder, sourceOrder) {
+  const currentInternalStatus = normalizeCrmStatus(existingOrder?.internal_status);
+  const shipmentStatus = normalizeCrmStatus(existingOrder?.shipment_status);
+  const hasTracking = Boolean(existingOrder?.awb_number || existingOrder?.shipment_waybill);
+
+  if (sourceOrder.status === 'CANCELED') {
+    return { internal_status: 'cancelled' };
+  }
+
+  if (sourceOrder.fulfillment_status === 'FULFILLED') {
+    if (hasTracking) {
+      const trackedStatus = internalStatusForShipment(shipmentStatus);
+      return trackedStatus && currentInternalStatus === 'fulfilled_no_tracking'
+        ? { internal_status: trackedStatus }
+        : {};
+    }
+
+    return {
+      internal_status: 'fulfilled_no_tracking',
+      shipment_status: existingOrder?.shipment_status || 'not_booked'
+    };
+  }
+
+  if (currentInternalStatus === 'fulfilled_no_tracking') {
+    return {
+      internal_status: ['PAID', 'APPROVED'].includes(sourceOrder.payment_status) ? 'awaiting_packing' : 'not_paid'
+    };
+  }
+
+  return {};
+}
+
+function internalStatusForShipment(status) {
+  if (status === 'delivered') return 'installation_pending';
+  if (status === 'out_for_delivery' || status === 'out-for-delivery') return 'out_for_delivery';
+  if (status === 'in_transit' || status === 'in-transit') return 'in_transit';
+  if (status === 'picked_up' || status === 'picked-up' || status === 'dispatched') return 'pickup_pending';
+  if (status === 'booked' || status === 'shipment_booked') return 'shipment_booked';
+  return '';
+}
+
 async function upsertCustomer(supabase, customer) {
   if (customer.wix_contact_id) {
     const existing = await supabase.select('customers', `wix_contact_id=eq.${encodeURIComponent(customer.wix_contact_id)}&limit=1`);
@@ -513,8 +549,11 @@ async function insertAddress(supabase, customerId, address) {
 }
 
 async function insertShipmentAttempt(supabase, shipment, record) {
-  const existing = await supabase.select('shipment_attempts', `shipment_id=eq.${shipment.id}&select=attempt_number`);
-  const attemptNumber = existing.length + 1;
+  const existing = await supabase.select(
+    'shipment_attempts',
+    `shipment_id=eq.${shipment.id}&select=attempt_number&order=attempt_number.desc&limit=1`
+  );
+  const attemptNumber = Number(existing[0]?.attempt_number || 0) + 1;
   await supabase.insert('shipment_attempts', {
     shipment_id: shipment.id,
     attempt_number: attemptNumber,
@@ -523,6 +562,25 @@ async function insertShipmentAttempt(supabase, shipment, record) {
     success: record.status === 'booked',
     error: record.error || null
   });
+}
+
+async function writeSupabaseShipment(supabase, method, query, row) {
+  try {
+    return method === 'patch'
+      ? await supabase.patch('shipments', query, row)
+      : await supabase.insert('shipments', row);
+  } catch (error) {
+    if (!isMissingColumnError(error) || !Object.hasOwn(row, 'shipment_type')) throw error;
+    const legacyRow = { ...row };
+    delete legacyRow.shipment_type;
+    return method === 'patch'
+      ? await supabase.patch('shipments', query, legacyRow)
+      : await supabase.insert('shipments', legacyRow);
+  }
+}
+
+function isMissingColumnError(error) {
+  return /PGRST204|column .* does not exist|could not find .* column|schema cache/i.test(error?.message || '');
 }
 
 async function findLatestSupabaseShipment(supabase, legacyOrderId) {
@@ -561,6 +619,7 @@ function denormalizeShipment(row) {
     updatedAt: row.updated_at,
     orderId: row.legacy_order_id,
     orderNumber: row.order_number,
+    shipmentType: row.shipment_type || 'original',
     status: row.status,
     requestPayload: row.request_payload,
     delhiveryResponse: row.carrier_response,
@@ -684,6 +743,10 @@ function normalizeShipmentStatus(status) {
   return normalized;
 }
 
+function normalizeCrmStatus(status) {
+  return String(status || '').trim().toLowerCase().replace(/-/g, '_');
+}
+
 function normalizeBuyerCallStatus(status) {
   if (status === 'completed') return 'answered_confirmed';
   if (status === 'retry') return 'no_answer';
@@ -781,15 +844,6 @@ async function upsertSupabaseAmazonOrder(supabase, amazonPayload) {
     updated_at: new Date().toISOString()
   };
   const savedOrder = await supabase.upsert('orders', orderRow, 'source,external_order_id');
-
-  const rawChanged = !existingOrder || JSON.stringify(existingOrder.raw_order) !== JSON.stringify(normalized.order.raw_order);
-  if (rawChanged) {
-    await supabase.insert('order_source_versions', {
-      order_id: savedOrder.id,
-      source: 'amazon',
-      raw_order: normalized.order.raw_order
-    });
-  }
 
   for (const item of normalized.items) {
     await supabase.upsert('order_items', { ...item, order_id: savedOrder.id }, 'order_id,wix_line_item_id');
