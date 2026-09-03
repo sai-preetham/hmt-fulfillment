@@ -31,7 +31,11 @@ export default async function DashboardPage() {
           <p className="muted">A working queue for fulfillment, packing, courier tracking, installation follow-up, feedback, and support.</p>
         </div>
         <div className="toolbar">
-          <Link className="button secondary" href="/orders">Search orders</Link>
+          <form className="filters" action="/orders" style={{ margin: 0 }}>
+            <input name="q" placeholder="Name, phone, order, AWB" />
+            <button type="submit">Search</button>
+          </form>
+          <Link className="button secondary" href="/orders">All orders</Link>
           <Link className="button" href="/shipments">Book shipment</Link>
         </div>
       </header>

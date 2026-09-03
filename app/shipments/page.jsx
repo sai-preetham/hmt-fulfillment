@@ -1,12 +1,13 @@
 import { AppShell } from '@/components/app-shell';
-import { OrderTable } from '@/components/order-table';
+import { OrderFilters, OrderTable } from '@/components/order-table';
 import { isWixFulfilled, listOrders } from '@/lib/crm/data';
 
 // This queue must reflect newly synced Wix orders on every navigation.
 export const dynamic = 'force-dynamic';
 
-export default async function ShipmentsPage() {
-  const allOrders = await listOrders({ limit: 150 });
+export default async function ShipmentsPage({ searchParams }) {
+  const query = (await searchParams)?.q || '';
+  const allOrders = await listOrders({ query, limit: 150 });
   const paidOrders = allOrders.filter(order => ['PAID', 'APPROVED', 'paid', 'approved'].includes(order.payment_status));
   const orders = paidOrders.filter(order => {
     const paid = ['PAID', 'APPROVED', 'paid', 'approved'].includes(order.payment_status);
@@ -36,7 +37,7 @@ export default async function ShipmentsPage() {
           </article>
         ))}
       </section>
-      <section className="panel"><OrderTable orders={orders} /></section>
+      <section className="panel"><OrderFilters query={query} action="/shipments" showStatus={false} showSource={false} /><OrderTable orders={orders} /></section>
     </AppShell>
   );
 }

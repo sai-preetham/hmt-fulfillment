@@ -5,16 +5,18 @@ import { STATUS_FILTERS } from '@/lib/crm/constants';
 import { OrderContents } from './order-contents';
 import { StatusPill } from './status-pill';
 
-export function OrderFilters({ query = '', status = '', source = '' }) {
+export function OrderFilters({ query = '', status = '', source = '', action = '/orders', showStatus = true, showSource = true, hiddenFields = {} }) {
   return (
-    <form className="filters" action="/orders">
+    <form className="filters" action={action}>
+      {Object.entries(hiddenFields).map(([name, value]) => <input type="hidden" name={name} value={value} key={name} />)}
       <label>
         <span>Search</span>
         <div style={{ position: 'relative' }}>
           <Search size={16} style={{ left: 10, position: 'absolute', top: 11, color: '#667085' }} />
-          <input name="q" defaultValue={query} placeholder="Name, phone, order, AWB, bike, source" style={{ paddingLeft: 32 }} />
+          <input name="q" defaultValue={query} placeholder="Name, phone, order, AWB" style={{ paddingLeft: 32 }} />
         </div>
       </label>
+      {showStatus ? (
       <label>
         <span>Status</span>
         <select name="status" defaultValue={status}>
@@ -22,6 +24,8 @@ export function OrderFilters({ query = '', status = '', source = '' }) {
           {STATUS_FILTERS.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
         </select>
       </label>
+      ) : null}
+      {showSource ? (
       <label>
         <span>Source</span>
         <select name="source" defaultValue={source}>
@@ -31,6 +35,7 @@ export function OrderFilters({ query = '', status = '', source = '' }) {
           <option value="manual">Manual</option>
         </select>
       </label>
+      ) : null}
       <label>
         <span>&nbsp;</span>
         <button type="submit">Apply</button>
