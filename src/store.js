@@ -105,6 +105,17 @@ export async function findLatestShipmentForOrder(order) {
   return rows[0] || null;
 }
 
+/** Return a delivered shipment, if any, so older cancelled legs cannot undo it. */
+export async function findDeliveredShipmentForOrder(orderId) {
+  const supabase = getSupabaseClient();
+  if (!supabase || !orderId) return null;
+  const rows = await supabase.select(
+    'shipments',
+    `order_id=eq.${encodeURIComponent(orderId)}&status=eq.delivered&order=updated_at.desc&limit=1`
+  );
+  return rows?.[0] ? denormalizeShipment(rows[0]) : null;
+}
+
 export async function listShipmentAttempts(shipmentId) {
   const supabase = getSupabaseClient();
   if (!supabase || !shipmentId) return [];
@@ -122,6 +133,7 @@ export async function updateOrderWixFulfillment(id, fields) {
     wix_fulfillment_id: fields.fulfillmentId || null,
     wix_fulfillment_synced_at: fields.syncedAt || null,
     wix_fulfillment_error: fields.error || null,
+    ...(Object.hasOwn(fields, 'fulfillmentStatus') ? { fulfillment_status: fields.fulfillmentStatus } : {}),
     updated_at: new Date().toISOString()
   });
 }

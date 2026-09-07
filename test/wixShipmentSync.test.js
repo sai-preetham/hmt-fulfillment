@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { markOrderPackedInWix, syncShipmentTrackingToWix } from '../src/wixShipmentSync.js';
+import { markOrderPackedInWix, markShipmentPickedUpInWix, syncShipmentTrackingToWix } from '../src/wixShipmentSync.js';
 
-test('syncs generated AWB to Wix as pending tracking before pickup', async () => {
+test('keeps a generated AWB local and does not fulfill Wix before pickup', async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];
   globalThis.fetch = async (url, options = {}) => {
     requests.push({ url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
+    if (String(url).includes('/rest/v1/orders') && (options.method || 'GET') === 'GET') {
+      return jsonResponse([{
+        id: 'order-db-id',
+        wix_order_id: 'wix-order-1',
+        raw_order: { lineItems: [{ id: 'line-1', quantity: 1 }] }
+      }]);
+    }
     if (String(url).includes('/rest/v1/orders') && options.method === 'PATCH') {
       return jsonResponse([{ id: 'order-db-id', ...requests.at(-1).body }]);
     }
@@ -29,13 +36,9 @@ test('syncs generated AWB to Wix as pending tracking before pickup', async () =>
       config()
     );
 
-    const wixRequest = requests.find(request => request.url.includes('/create-fulfillment'));
     const orderPatches = requests.filter(request => request.url.includes('/rest/v1/orders') && request.method === 'PATCH');
-    assert.equal('status' in wixRequest.body.fulfillment, false);
-    assert.equal(wixRequest.body.fulfillment.trackingInfo.trackingNumber, 'AWB123');
-    assert.equal(orderPatches[0].body.wix_fulfillment_status, 'pending-tracking');
-    assert.equal(orderPatches[1].body.wix_fulfillment_status, 'tracking-synced');
-    assert.equal(orderPatches[1].body.wix_fulfillment_id, 'fulfillment-1');
+    assert.equal(requests.some(request => request.url.includes('/create-fulfillment')), false);
+    assert.equal(orderPatches[0].body.wix_fulfillment_status, 'awaiting-pickup');
   } finally {
     globalThis.fetch = originalFetch;
     delete process.env.SUPABASE_URL;
@@ -43,11 +46,18 @@ test('syncs generated AWB to Wix as pending tracking before pickup', async () =>
   }
 });
 
-test('keeps tracking pending even after courier pickup', async () => {
+test('creates the Wix fulfillment with tracking after courier pickup', async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];
   globalThis.fetch = async (url, options = {}) => {
     requests.push({ url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
+    if (String(url).includes('/rest/v1/orders') && (options.method || 'GET') === 'GET') {
+      return jsonResponse([{
+        id: 'order-db-id',
+        wix_order_id: 'wix-order-1',
+        raw_order: { lineItems: [{ id: 'line-1', quantity: 1 }] }
+      }]);
+    }
     if (String(url).includes('/rest/v1/orders') && options.method === 'PATCH') {
       return jsonResponse([{ id: 'order-db-id', ...requests.at(-1).body }]);
     }
@@ -60,14 +70,14 @@ test('keeps tracking pending even after courier pickup', async () => {
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role';
 
   try {
-    await syncShipmentTrackingToWix(
+    await markShipmentPickedUpInWix(
       {
-        id: 'order-db-id',
-        wix_order_id: 'wix-order-1',
-        wix_fulfillment_id: 'fulfillment-1',
-        raw_order: { lineItems: [{ id: 'line-1', quantity: 1 }] }
+        id: 'shipment-db-id',
+        order_id: 'order-db-id',
+        waybill: 'AWB123',
+        status: 'picked-up',
+        service_mode: 'Express'
       },
-      { waybill: 'AWB123', status: 'picked-up', service_mode: 'Express' },
       config()
     );
 
@@ -77,8 +87,8 @@ test('keeps tracking pending even after courier pickup', async () => {
     assert.equal(wixRequest.body.fulfillment.trackingInfo.trackingNumber, 'AWB123');
     assert.equal(wixRequest.body.fulfillment.trackingInfo.trackingLink, 'https://track.example/AWB123');
     assert.equal('status' in wixRequest.body.fulfillment, false);
-    assert.equal(orderPatches[0].body.wix_fulfillment_status, 'pending-tracking');
-    assert.equal(orderPatches[1].body.wix_fulfillment_status, 'tracking-synced');
+    assert.equal(orderPatches[0].body.wix_fulfillment_status, 'pending-fulfillment');
+    assert.equal(orderPatches[1].body.wix_fulfillment_status, 'fulfilled');
   } finally {
     globalThis.fetch = originalFetch;
     delete process.env.SUPABASE_URL;
@@ -162,3 +172,42 @@ function jsonResponse(payload) {
     text: async () => JSON.stringify(payload)
   };
 }
+
+test('booking sync stores awaiting-pickup and does not create a Wix fulfillment', async () => {
+  const { syncBookedShipmentToWix } = await import('../src/booking.js');
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
+    if (String(url).includes('/rest/v1/orders') && options.method === 'PATCH') {
+      return jsonResponse([{ id: 'order-db-id', ...requests.at(-1).body }]);
+    }
+    if (String(url).includes('/create-fulfillment') || String(url).includes('/update-fulfillment')) {
+      return jsonResponse({ fulfillment: { id: 'fulfillment-1' } });
+    }
+    throw new Error(`Unexpected request ${options.method || 'GET'} ${url}`);
+  };
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role';
+
+  try {
+    await syncBookedShipmentToWix(
+      {
+        id: 'order-db-id',
+        wix_order_id: 'wix-order-1',
+        raw_order: { lineItems: [{ id: 'line-1', quantity: 1 }] }
+      },
+      { waybill: 'AWB999', status: 'booked', courierCode: 'fedex', service_mode: 'Express' },
+      config()
+    );
+
+    assert.equal(requests.some(request => request.url.includes('/create-fulfillment')), false);
+    assert.equal(requests.some(request => request.url.includes('/update-fulfillment')), false);
+    const orderPatches = requests.filter(request => request.url.includes('/rest/v1/orders') && request.method === 'PATCH');
+    assert.equal(orderPatches[0].body.wix_fulfillment_status, 'awaiting-pickup');
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  }
+});

@@ -1,6 +1,6 @@
 import { getCourierAdapter } from './couriers/index.js';
 import { findShipmentByOrderId, updateOrderWixFulfillment, upsertShipment, upsertWixOrder, upsertAmazonOrder, findOrderById } from './store.js';
-import { createWixFulfillment } from './wixFulfillment.js';
+import { updateWixFulfillmentTracking } from './wixFulfillment.js';
 import { fetchWixOrder } from './wix.js';
 
 export async function bookWixOrder(order, config, metadata = {}) {
@@ -18,7 +18,8 @@ export async function bookWixOrder(order, config, metadata = {}) {
   const payload = courier.mapOrder(order, bookingConfig, {
     internationalService: metadata.internationalService,
     reverse: metadata.reverse,
-    orderNumberOverride: metadata.orderNumberOverride
+    orderNumberOverride: metadata.orderNumberOverride,
+    deliveryOverride: metadata.deliveryOverride
   });
   const pending = await upsertShipment({
     ...metadata,
@@ -80,31 +81,47 @@ export async function bookWixOrder(order, config, metadata = {}) {
 
 export async function syncBookedShipmentToWix(order, shipment, config) {
   if (!order?.id || !shipment?.waybill) return null;
-  await updateOrderWixFulfillment(order.id, {
-    status: 'pending',
-    error: null
-  });
 
-  try {
-    const result = await createWixFulfillment(order, normalizeShipmentForWix(shipment), config);
-    if (result.skipped) {
-      return updateOrderWixFulfillment(order.id, {
-        status: result.status,
-        error: null
-      });
-    }
-    return updateOrderWixFulfillment(order.id, {
-      status: 'synced',
-      fulfillmentId: result.fulfillmentId,
-      syncedAt: new Date().toISOString(),
+  // Replacement / already-fulfilled orders: refresh tracking on the existing
+  // Wix fulfillment only. Never create a new fulfillment at booking time.
+  if (order.wix_fulfillment_id) {
+    await updateOrderWixFulfillment(order.id, {
+      status: 'pending',
       error: null
     });
-  } catch (error) {
-    return updateOrderWixFulfillment(order.id, {
-      status: 'failed',
-      error: error.message
-    });
+    try {
+      const result = await updateWixFulfillmentTracking(
+        order,
+        order.wix_fulfillment_id,
+        normalizeShipmentForWix(shipment),
+        config
+      );
+      if (result.skipped) {
+        return updateOrderWixFulfillment(order.id, {
+          status: result.status,
+          error: null
+        });
+      }
+      return updateOrderWixFulfillment(order.id, {
+        status: 'synced',
+        fulfillmentId: result.fulfillmentId || order.wix_fulfillment_id,
+        syncedAt: new Date().toISOString(),
+        error: null
+      });
+    } catch (error) {
+      return updateOrderWixFulfillment(order.id, {
+        status: 'failed',
+        error: error.message
+      });
+    }
   }
+
+  // New AWB booking: keep tracking in Ops/Chatwoot, but leave Wix unfulfilled
+  // until the courier confirms warehouse pickup (or later).
+  return updateOrderWixFulfillment(order.id, {
+    status: 'awaiting-pickup',
+    error: null
+  });
 }
 
 export async function bookWixOrderById(orderId, config, metadata = {}) {
@@ -169,7 +186,8 @@ export async function bookAmazonOrder(order, config, metadata = {}) {
   const payload = courier.mapOrder(order, bookingConfig, {
     internationalService: metadata.internationalService,
     reverse: metadata.reverse,
-    orderNumberOverride: metadata.orderNumberOverride
+    orderNumberOverride: metadata.orderNumberOverride,
+    deliveryOverride: metadata.deliveryOverride
   });
   const pending = await upsertShipment({
     ...metadata,
