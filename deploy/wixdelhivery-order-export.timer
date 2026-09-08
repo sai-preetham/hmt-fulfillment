@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the daily Wix order export at 00:01
+
+[Timer]
+OnCalendar=*-*-* 00:01:00
+Persistent=true
+Unit=wixdelhivery-order-export.service
+
+[Install]
+WantedBy=timers.target

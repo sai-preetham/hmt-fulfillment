@@ -1,9 +1,12 @@
 import { AppShell } from '@/components/app-shell';
+import { CrmSettingsForm } from '@/components/crm-settings-form';
 import { COURIERS, ROLES } from '@/lib/crm/constants';
+import { getCrmSettings } from '@/lib/crm/data-settings';
 import { createBrowserConfig } from '@/lib/supabase/server';
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
   const supabase = createBrowserConfig();
+  const settings = await getCrmSettings();
   return (
     <AppShell>
       <header className="pageHeader">
@@ -28,6 +31,7 @@ export default function SettingsPage() {
           <div className="panelBody statusStack">{COURIERS.map(courier => <span className="pill neutral" key={courier}>{courier.replaceAll('_', ' ')}</span>)}</div>
         </div>
       </section>
+      <CrmSettingsForm settings={settings} supabaseConfigured={Boolean(supabase.url)} />
     </AppShell>
   );
 }

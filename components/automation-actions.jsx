@@ -37,18 +37,18 @@ export function AutomationActions({ batches = [] }) {
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'FedEx CSV export failed.');
+        throw new Error(data.error || 'FedEx Excel export failed.');
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${batchNumber || 'fedex-export'}.csv`;
+      link.download = `${batchNumber || 'fedex-export'}.xlsx`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      setMessage('FedEx CSV downloaded.');
+      setMessage('FedEx Excel downloaded.');
     } catch (error) {
       setMessage(error.message);
     }
@@ -80,7 +80,7 @@ export function AutomationActions({ batches = [] }) {
                 <strong>{batch.batch_number}</strong>
                 <span className="subtle">{batch.status} · {(batch.fedex_export_items || []).length} orders</span>
                 <div className="toolbar" style={{ marginTop: 8 }}>
-                  <button type="button" className="secondary" onClick={() => downloadBatch(batch.id, batch.batch_number)}>Download CSV</button>
+                  <button type="button" className="secondary" onClick={() => downloadBatch(batch.id, batch.batch_number)}>Download Excel</button>
                 </div>
               </div>
             ))}

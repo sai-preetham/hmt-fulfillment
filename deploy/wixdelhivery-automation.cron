@@ -1,3 +1,5 @@
 # Fallback cron entry for Raspberry Pi. Prefer the systemd timer when available.
 # Add AUTOMATION_SECRET to /etc/environment or inline it before curl.
 */15 * * * * curl -fsS -X POST http://127.0.0.1:3000/api/automation/run -H "Authorization: Bearer $AUTOMATION_SECRET" -H "Content-Type: application/json" -d '{"trigger":"cron","force":true}' >/dev/null 2>&1
+# Refresh sourcing data and post the Discord 24-hour count at 00:01 daily.
+1 0 * * * curl -fsS -X POST http://127.0.0.1:3000/api/integrations/orders/export -H "Authorization: Bearer $AUTOMATION_SECRET" -H "Content-Type: application/json" -d '{"trigger":"daily-cron"}' >/dev/null 2>&1

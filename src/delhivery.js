@@ -1,7 +1,16 @@
 export function mapWixOrderToDelhivery(order, config, options = {}) {
   const destination = order?.shippingInfo?.logistics?.shippingDestination;
-  const address = destination?.address || order?.billingInfo?.address || {};
-  const contact = destination?.contactDetails || order?.billingInfo?.contactDetails || {};
+  // A carrier booking must always go to the delivery address. Billing details
+  // are deliberately never a fallback: they can describe a different person
+  // or location and would create an incorrectly addressed shipment.
+  const address = {
+    ...(destination?.address || {}),
+    ...nonEmptyValues(options.deliveryOverride?.address)
+  };
+  const contact = {
+    ...(destination?.contactDetails || {}),
+    ...nonEmptyValues(options.deliveryOverride?.contact)
+  };
   const country = address.country || 'IN';
   if (isInternationalCountry(country)) {
     return mapWixOrderToInternationalDelhivery(order, config, options);
@@ -13,7 +22,7 @@ export function mapWixOrderToDelhivery(order, config, options = {}) {
   const totalAmount = amount(order?.priceSummary?.total?.amount) || sumLineItems(items);
   const paymentMode = options.reverse ? 'Pickup' : inferPaymentMode(order, config);
   const codAmount = paymentMode === 'COD' ? totalAmount : 0;
-  const orderId = order?.number ? `${order.number}` : `${order?.id}`;
+  const orderId = options.orderNumberOverride || (order?.number ? `${order.number}` : `${order?.id}`);
   validateSupportedDestination(address);
 
   const shipment = removeEmpty({
@@ -57,8 +66,14 @@ export function mapWixOrderToDelhivery(order, config, options = {}) {
 
 export function mapWixOrderToInternationalDelhivery(order, config, options = {}) {
   const destination = order?.shippingInfo?.logistics?.shippingDestination;
-  const address = destination?.address || order?.billingInfo?.address || {};
-  const contact = destination?.contactDetails || order?.billingInfo?.contactDetails || {};
+  const address = {
+    ...(destination?.address || {}),
+    ...nonEmptyValues(options.deliveryOverride?.address)
+  };
+  const contact = {
+    ...(destination?.contactDetails || {}),
+    ...nonEmptyValues(options.deliveryOverride?.contact)
+  };
   const lineItems = Array.isArray(order?.lineItems) ? order.lineItems : [];
   const shippableItems = lineItems.filter(item => item?.itemType?.preset !== 'DIGITAL');
   const items = shippableItems.length ? shippableItems : lineItems;
@@ -139,6 +154,81 @@ export async function createDelhiveryOrder(payload, config) {
   }
 
   return responseBody;
+}
+
+export async function cancelDelhiveryShipment(waybill, config) {
+  const delhivery = config?.delhivery || {};
+  if (!delhivery.token) throw new Error('DELHIVERY_API_TOKEN is required.');
+  if (!waybill) throw new Error('An AWB is required to cancel a Delhivery shipment.');
+  const cancelOrderUrl = delhivery.cancelOrderUrl || (
+    delhivery.env === 'production'
+      ? 'https://track.delhivery.com/api/p/edit'
+      : 'https://staging-express.delhivery.com/api/p/edit'
+  );
+  if (!cancelOrderUrl) throw new Error('Delhivery cancel URL is not configured.');
+
+  const response = await fetch(cancelOrderUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Token ${config.delhivery.token}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ waybill: String(waybill), cancellation: 'true' })
+  });
+  const body = await safeJson(response);
+  if (!response.ok || isDelhiveryFailure(body)) {
+    throw new Error(`Delhivery cancellation failed${response.ok ? '' : ` (${response.status})`}: ${JSON.stringify(body)}`);
+  }
+  return body;
+}
+
+/** Raise a warehouse-level pickup request for ready outbound shipments. */
+export async function createDelhiveryPickupRequest(input, config) {
+  if (!config.delhivery.token) throw new Error('DELHIVERY_API_TOKEN is required.');
+  const pickup_location = String(input?.pickupLocation || config.delhivery.pickupLocation || '').trim();
+  const pickup_date = String(input?.pickupDate || '').trim();
+  const pickup_time = String(input?.pickupTime || '').trim();
+  const expected_package_count = Number(input?.expectedPackageCount);
+  const missing = [];
+  if (!pickup_location) missing.push('pickup location');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(pickup_date)) missing.push('pickup date (YYYY-MM-DD)');
+  if (!/^\d{2}:\d{2}(?::\d{2})?$/.test(pickup_time)) missing.push('pickup time (HH:MM)');
+  if (!Number.isInteger(expected_package_count) || expected_package_count < 1) missing.push('expected package count');
+  if (missing.length) throw new Error(`Pickup request requires ${missing.join(', ')}.`);
+
+  const pickupRequestUrl = (config.delhivery || {}).pickupRequestUrl || (
+    (config.delhivery || {}).env === 'production'
+      ? 'https://track.delhivery.com/fm/request/new/'
+      : 'https://staging-express.delhivery.com/fm/request/new/'
+  );
+  if (!pickupRequestUrl) throw new Error('Delhivery pickup request URL is not configured.');
+  const response = await fetch(pickupRequestUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Token ${config.delhivery.token}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      pickup_time: pickup_time.length === 5 ? `${pickup_time}:00` : pickup_time,
+      pickup_date,
+      pickup_location,
+      expected_package_count
+    })
+  });
+  const body = await safeJson(response);
+  let pickupId = body?.pickup_id ?? body?.pickupId ?? body?.data?.pickup_id ?? null;
+  const detailText = [body?.message, body?.error, body?.detail, body].map((value) => typeof value === 'string' ? value : JSON.stringify(value || {})).join(' ');
+  const existingMatch = detailText.match(/Pickup Request[^0-9]*([0-9]+)/i);
+  if (pickupId == null && existingMatch) pickupId = existingMatch[1];
+  if (pickupId != null && (body?.pr_exist || /Already Exist/i.test(detailText))) {
+    return { ...body, pickup_id: pickupId, pickup_id_text: String(pickupId), already_existed: true };
+  }
+  if (!response.ok || pickupId == null || isDelhiveryFailure(body)) {
+    throw new Error(`Delhivery pickup request failed${response.ok ? '' : ` (${response.status})`}: ${detailText}`);
+  }
+  return { ...body, pickup_id: pickupId, pickup_id_text: String(pickupId) };
 }
 
 export async function calculateDelhiveryCharge({ destinationPincode, weightGrams, mode, status }, config) {
@@ -347,6 +437,12 @@ function removeEmpty(object) {
   );
 }
 
+function nonEmptyValues(object = {}) {
+  return Object.fromEntries(
+    Object.entries(object).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+  );
+}
+
 function sanitizeShipment(shipment) {
   const blocked = /[&#%;\\]/g;
   return Object.fromEntries(
@@ -394,7 +490,7 @@ export function mapAmazonOrderToDelhivery(amazonPayload, config, options = {}) {
   const totalAmount = Number(order?.OrderTotal?.Amount || 0);
   const paymentMode = 'Prepaid';
   const codAmount = 0;
-  const orderId = order?.AmazonOrderId || '';
+  const orderId = options.orderNumberOverride || order?.AmazonOrderId || '';
 
   const streetAddress = [address?.AddressLine1 || '', address?.AddressLine2 || ''].filter(Boolean).join(', ');
 
@@ -436,4 +532,3 @@ export function mapAmazonOrderToDelhivery(amazonPayload, config, options = {}) {
     }
   };
 }
-

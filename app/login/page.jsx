@@ -52,6 +52,7 @@ export default function LoginPage() {
               <input type="password" name="password" autoComplete="current-password" required />
             </label>
             <button disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+            <a className="muted" href="/forgot-password">Forgot password?</a>
             {message ? <p className="muted">{message}</p> : null}
           </form>
         </div>

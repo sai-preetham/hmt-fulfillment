@@ -4,8 +4,14 @@ import {
   courierCodeForTracking,
   fetchDelhiveryTracking,
   groupShipmentsByCourier,
-  isDelhiveryInternationalWaybill
+  isDelhiveryInternationalWaybill,
+  normalizeDelhiveryStatus
 } from '../src/delhiveryTracking.js';
+
+test('maps Delhivery Not Picked and cancelled statuses to cancelled', () => {
+  assert.equal(normalizeDelhiveryStatus('Not Picked'), 'cancelled');
+  assert.equal(normalizeDelhiveryStatus('Cancelled'), 'cancelled');
+});
 
 test('routes DL...CN international AWBs through Delhivery tracking', () => {
   assert.equal(isDelhiveryInternationalWaybill('DL343934225CN'), true);

@@ -7,17 +7,17 @@ export async function fetchShiprocketTracking(waybills, config) {
   const token = await getShiprocketToken(config);
 
   for (const waybill of waybills) {
-    const url = new URL(`${config.shiprocket.baseUrl.replace(/\/$/, '')}/courier/track/awb/${encodeURIComponent(waybill)}`);
-    const response = await fetch(url.toString(), {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json'
-      }
-    });
-
-    const body = await safeJson(response);
+    const { response, body } = await fetchShiprocketTrackingByAwb(waybill, token, config);
     if (!response.ok) {
+      if (response.status === 401 && config.shiprocket.token && canLogin(config)) {
+        const refreshedToken = await loginShiprocket(config);
+        const retry = await fetchShiprocketTrackingByAwb(waybill, refreshedToken, config);
+        if (retry.response.ok) {
+          result.set(waybill, retry.body?.tracking_data || retry.body);
+          continue;
+        }
+        throw new Error(`Shiprocket tracking API failed for AWB ${waybill} (${retry.response.status}): ${JSON.stringify(retry.body)}`);
+      }
       throw new Error(`Shiprocket tracking API failed for AWB ${waybill} (${response.status}): ${JSON.stringify(body)}`);
     }
 
@@ -25,6 +25,18 @@ export async function fetchShiprocketTracking(waybills, config) {
   }
 
   return result;
+}
+
+async function fetchShiprocketTrackingByAwb(waybill, token, config) {
+  const url = new URL(`${config.shiprocket.baseUrl.replace(/\/$/, '')}/courier/track/awb/${encodeURIComponent(waybill)}`);
+  const response = await fetch(url.toString(), {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json'
+    }
+  });
+  return { response, body: await safeJson(response) };
 }
 
 export function normalizeShiprocketStatus(rawStatus) {
@@ -146,6 +158,14 @@ export function extractShiprocketTrackingEvents(pkg) {
 async function getShiprocketToken(config) {
   if (config.shiprocket.token) return config.shiprocket.token;
   if (cachedToken) return cachedToken;
+  return loginShiprocket(config);
+}
+
+function canLogin(config) {
+  return Boolean(config.shiprocket.email && config.shiprocket.password);
+}
+
+async function loginShiprocket(config) {
   if (!config.shiprocket.email || !config.shiprocket.password) {
     throw new Error('Shiprocket tracking requires SHIPROCKET_API_TOKEN or SHIPROCKET_EMAIL/SHIPROCKET_PASSWORD.');
   }

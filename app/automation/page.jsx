@@ -11,7 +11,7 @@ export default async function AutomationPage() {
   const queueCards = [
     ['Ready to book', queues.readyToBook || 0],
     ['Blocked validation', queues.blockedValidation || 0],
-    ['FedEx CSV pending', queues.fedexPending || 0],
+    ['FedEx Excel pending', queues.fedexPending || 0],
     ['Awaiting FedEx AWB', queues.awaitingFedexAwb || 0],
     ['Wix failed', queues.wixFailed || 0],
     ['Chatwoot failed', queues.chatwootFailed || 0],

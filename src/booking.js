@@ -1,6 +1,6 @@
 import { getCourierAdapter } from './couriers/index.js';
 import { findShipmentByOrderId, updateOrderWixFulfillment, upsertShipment, upsertWixOrder, upsertAmazonOrder, findOrderById } from './store.js';
-import { createWixFulfillment } from './wixFulfillment.js';
+import { syncShipmentTrackingToWix } from './wixShipmentSync.js';
 import { fetchWixOrder } from './wix.js';
 
 export async function bookWixOrder(order, config, metadata = {}) {
@@ -8,7 +8,7 @@ export async function bookWixOrder(order, config, metadata = {}) {
   if (!orderId) throw new Error('Order is missing id/number.');
 
   const existing = await findShipmentByOrderId(String(orderId));
-  if (existing?.status === 'booked') {
+  if (existing?.status === 'booked' && !metadata.allowMultipleShipments) {
     return { shipment: existing, skipped: true };
   }
 
@@ -17,13 +17,16 @@ export async function bookWixOrder(order, config, metadata = {}) {
   const courier = getCourierAdapter(metadata.courierCode || 'delhivery');
   const payload = courier.mapOrder(order, bookingConfig, {
     internationalService: metadata.internationalService,
-    reverse: metadata.reverse
+    reverse: metadata.reverse,
+    orderNumberOverride: metadata.orderNumberOverride,
+    deliveryOverride: metadata.deliveryOverride
   });
   const pending = await upsertShipment({
     ...metadata,
+    createNewShipment: metadata.allowMultipleShipments,
     dbOrderId: persistedOrder?.id,
     orderId: String(orderId),
-    orderNumber: order?.number || '',
+    orderNumber: payload.shipments?.[0]?.order || metadata.orderNumberOverride || order?.number || '',
     courierCode: courier.code,
     status: bookingConfig.createAwbOnBook ? 'pending' : 'pending-zone',
     requestPayload: payload
@@ -42,7 +45,7 @@ export async function bookWixOrder(order, config, metadata = {}) {
     };
   }
 
-  if (payload.flow === 'international') {
+  if (payload.flow === 'international' && courier.code !== 'fedex') {
     const queued = await upsertShipment({
       ...pending,
       status: 'pending-international',
@@ -77,32 +80,7 @@ export async function bookWixOrder(order, config, metadata = {}) {
 }
 
 export async function syncBookedShipmentToWix(order, shipment, config) {
-  if (!order?.id || !shipment?.waybill) return null;
-  await updateOrderWixFulfillment(order.id, {
-    status: 'pending',
-    error: null
-  });
-
-  try {
-    const result = await createWixFulfillment(order, normalizeShipmentForWix(shipment), config);
-    if (result.skipped) {
-      return updateOrderWixFulfillment(order.id, {
-        status: result.status,
-        error: null
-      });
-    }
-    return updateOrderWixFulfillment(order.id, {
-      status: 'synced',
-      fulfillmentId: result.fulfillmentId,
-      syncedAt: new Date().toISOString(),
-      error: null
-    });
-  } catch (error) {
-    return updateOrderWixFulfillment(order.id, {
-      status: 'failed',
-      error: error.message
-    });
-  }
+  return syncShipmentTrackingToWix(order, shipment, config);
 }
 
 export async function bookWixOrderById(orderId, config, metadata = {}) {
@@ -130,9 +108,11 @@ function normalizeShippingMode(value) {
 
 function extractWaybill(response) {
   return (
+    response?.waybill ||
+    response?.output?.transactionShipments?.[0]?.masterTrackingNumber ||
+    response?.output?.transactionShipments?.[0]?.pieceResponses?.[0]?.trackingNumber ||
     response?.packages?.[0]?.waybill ||
     response?.packages?.[0]?.waybill_number ||
-    response?.waybill ||
     response?.upload_wbn ||
     ''
   );
@@ -141,7 +121,7 @@ function extractWaybill(response) {
 function normalizeShipmentForWix(shipment) {
   return {
     waybill: shipment.waybill,
-    courier_code: shipment.source || 'delhivery',
+    courier_code: shipment.source || shipment.courierCode || 'delhivery',
     courier_service_code: shipment.shippingMode === 'S' ? 'surface' : 'express',
     service_mode:
       shipment.service_mode ||
@@ -155,7 +135,7 @@ export async function bookAmazonOrder(order, config, metadata = {}) {
   if (!orderId) throw new Error('Amazon order is missing AmazonOrderId.');
 
   const existing = await findShipmentByOrderId(String(orderId));
-  if (existing?.status === 'booked') {
+  if (existing?.status === 'booked' && !metadata.allowMultipleShipments) {
     return { shipment: existing, skipped: true };
   }
 
@@ -164,13 +144,16 @@ export async function bookAmazonOrder(order, config, metadata = {}) {
   const courier = getCourierAdapter(metadata.courierCode || 'delhivery');
   const payload = courier.mapOrder(order, bookingConfig, {
     internationalService: metadata.internationalService,
-    reverse: metadata.reverse
+    reverse: metadata.reverse,
+    orderNumberOverride: metadata.orderNumberOverride,
+    deliveryOverride: metadata.deliveryOverride
   });
   const pending = await upsertShipment({
     ...metadata,
+    createNewShipment: metadata.allowMultipleShipments,
     dbOrderId: persistedOrder?.id,
     orderId: String(orderId),
-    orderNumber: orderId,
+    orderNumber: payload.shipments?.[0]?.order || metadata.orderNumberOverride || orderId,
     courierCode: courier.code,
     status: bookingConfig.createAwbOnBook ? 'pending' : 'pending-zone',
     requestPayload: payload

@@ -24,9 +24,6 @@ test('runs Amazon sync in mock/demo mode when credentials are missing', async ()
     if (String(url).includes('/rest/v1/orders') && options.method === 'POST') {
       return jsonResponse({ id: 'order-1', external_order_id: 'AMZ-mock' });
     }
-    if (String(url).includes('/rest/v1/order_source_versions') && options.method === 'POST') {
-      return jsonResponse({ id: 'os-1' });
-    }
     if (String(url).includes('/rest/v1/order_items') && options.method === 'POST') {
       return jsonResponse({ id: 'item-1' });
     }
@@ -62,8 +59,10 @@ test('runs Amazon sync in mock/demo mode when credentials are missing', async ()
 
     const customerPost = requests.find(r => r.url.includes('/rest/v1/customers') && r.method === 'POST');
     const orderPost = requests.find(r => r.url.includes('/rest/v1/orders') && r.method === 'POST');
+    const addressPosts = requests.filter(r => r.url.includes('/rest/v1/customer_addresses') && r.method === 'POST');
     assert.equal(customerPost.body.email, 'sneha@example.com');
     assert.ok(orderPost.body.external_order_id.startsWith('AMZ-406-'));
+    assert.deepEqual(addressPosts.map(request => request.body.address_type), ['shipping', 'billing']);
   } finally {
     globalThis.fetch = originalFetch;
     delete process.env.SUPABASE_URL;

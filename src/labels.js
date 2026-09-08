@@ -67,7 +67,9 @@ function fetchDelhiveryLabel(shipment, config) {
     headers: {
       Authorization: `Token ${config.delhivery.token}`,
       Accept: 'application/pdf,application/json,text/html;q=0.9,*/*;q=0.8'
-    }
+    },
+    // Avoid leaving the booking screen stuck if the carrier endpoint stalls.
+    signal: AbortSignal.timeout(45_000)
   });
 }
 

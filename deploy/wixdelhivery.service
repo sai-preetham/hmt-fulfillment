@@ -5,9 +5,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=saipi
+Group=saipi
 WorkingDirectory=/home/saipi/wixdelhivery
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/npm start
+Environment=AUTH_REQUIRED=true
+EnvironmentFile=-/home/saipi/wixdelhivery/.release.env
+ExecStart=/usr/bin/node /home/saipi/wixdelhivery/node_modules/next/dist/bin/next start
+TimeoutStopSec=20
 Restart=always
 RestartSec=5
 

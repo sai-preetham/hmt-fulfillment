@@ -1,4 +1,5 @@
 import { AppShell } from '@/components/app-shell';
+import Link from 'next/link';
 import { ManualOrderForm } from '@/components/manual-order-form';
 import { OrderFilters, OrderTable } from '@/components/order-table';
 import { listOrders } from '@/lib/crm/data';
@@ -17,6 +18,7 @@ export default async function OrdersPage({ searchParams }) {
           <p className="eyebrow">Orders</p>
           <h1>Order workbench</h1>
           <p className="muted">Search by customer, phone, order ID, AWB, bike model, or source.</p>
+          <Link className="subtle" href="/gst-invoices">View monthly GST invoice export</Link>
         </div>
       </header>
 

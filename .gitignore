@@ -5,3 +5,15 @@ data/
 skills-lock.json
 .DS_Store
 .next/
+
+# Local configuration, exports, previews, and deployment backups
+.env.*
+!.env.example
+._*
+artifacts/
+output/
+outputs/
+exports/
+tmp/
+.codex-deploy-backup/
+*.log

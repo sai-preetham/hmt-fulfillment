@@ -76,32 +76,40 @@ export function normalizeWixOrder(order, config = {}) {
 export function normalizeShipmentRecord(record) {
   const payloadShipment = record.requestPayload?.shipments?.[0] || {};
   const international = record.requestPayload?.flow === 'international';
+  const fedexShipment = record.requestPayload?.requestedShipment || {};
+  const fedexPackageLineItem = fedexShipment.requestedPackageLineItems?.[0] || {};
   const responsePackage = record.delhiveryResponse?.packages?.[0] || {};
+  const fedexPackage = record.delhiveryResponse?.output?.transactionShipments?.[0]?.pieceResponses?.[0] || {};
   const direction = record.reverse ? 'reverse' : payloadShipment.payment_mode === 'Pickup' ? 'reverse' : 'forward';
   const service = international
-    ? normalizeServiceCode(record.internationalService || record.requestPayload?.shipment?.service)
+    ? normalizeServiceCode(record.serviceCode || record.internationalService || fedexShipment.serviceType || record.requestPayload?.shipment?.service)
     : normalizeDomesticService(record.shippingMode || payloadShipment.md);
 
   return {
     order_id: record.dbOrderId || null,
     legacy_order_id: record.orderId || null,
     order_number: record.orderNumber || payloadShipment.order || null,
+    shipment_type: record.shipmentType || 'original',
     direction,
     flow: international ? 'international' : 'domestic',
     courier_code: record.courierCode || 'delhivery',
     courier_service_code: service,
-    service_mode: international ? record.requestPayload?.shipment?.service || null : payloadShipment.shipping_mode || null,
+    service_mode: international ? fedexShipment.serviceType || record.requestPayload?.shipment?.service || null : payloadShipment.shipping_mode || null,
     status: record.status || 'pending',
-    waybill: record.waybill || responsePackage.waybill || null,
+    waybill: record.waybill || responsePackage.waybill || record.delhiveryResponse?.waybill || fedexPackage.trackingNumber || null,
     upload_wbn: record.delhiveryResponse?.upload_wbn || null,
-    pickup_location: record.requestPayload?.pickup_location?.name || null,
-    length_cm: numberAmount(payloadShipment.shipment_length || record.requestPayload?.shipment?.dimensionsCm?.length),
-    width_cm: numberAmount(payloadShipment.shipment_width || record.requestPayload?.shipment?.dimensionsCm?.width),
-    height_cm: numberAmount(payloadShipment.shipment_height || record.requestPayload?.shipment?.dimensionsCm?.height),
-    weight_grams: numberAmount(payloadShipment.weight || record.requestPayload?.shipment?.weightGrams),
+    pickup_location: record.requestPayload?.pickup_location?.name || fedexShipment.shipper?.contact?.personName || null,
+    length_cm: numberAmount(payloadShipment.shipment_length || record.requestPayload?.shipment?.dimensionsCm?.length || fedexPackageLineItem.dimensions?.length),
+    width_cm: numberAmount(payloadShipment.shipment_width || record.requestPayload?.shipment?.dimensionsCm?.width || fedexPackageLineItem.dimensions?.width),
+    height_cm: numberAmount(payloadShipment.shipment_height || record.requestPayload?.shipment?.dimensionsCm?.height || fedexPackageLineItem.dimensions?.height),
+    weight_grams: numberAmount(payloadShipment.weight || record.requestPayload?.shipment?.weightGrams || weightToGrams(fedexPackageLineItem.weight)),
     cod_amount: numberAmount(payloadShipment.cod_amount) || 0,
     request_payload: record.requestPayload || {},
-    carrier_response: record.delhiveryResponse || null,
+    carrier_response: record.replacementPart
+      ? { ...(record.delhiveryResponse || {}), replacement_part: record.replacementPart }
+      : record.delhiveryResponse || null,
+    label_url: record.labelUrl || record.delhiveryResponse?.label_url || null,
+    label_format: record.labelFormat || record.delhiveryResponse?.label_format || null,
     error: record.error || null,
     message: record.message || null
   };
@@ -181,9 +189,19 @@ function normalizeDomesticService(mode) {
 
 function normalizeServiceCode(value) {
   const normalized = String(value || '').toLowerCase();
+  if (normalized.includes('fedex') && normalized.includes('priority')) return 'international_express';
   if (normalized.includes('saver')) return 'dlv_saver';
   if (normalized.includes('express')) return 'deferred_express';
   return normalized.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || null;
+}
+
+function weightToGrams(weight = {}) {
+  const value = numberAmount(weight.value);
+  if (!value) return null;
+  const units = String(weight.units || '').trim().toUpperCase();
+  if (units === 'KG' || units === 'KGS' || units === 'KILOGRAMS') return value * 1000;
+  if (units === 'LB' || units === 'LBS' || units === 'POUNDS') return value * 453.59237;
+  return value;
 }
 
 function redactPaymentSecrets(value) {
@@ -211,6 +229,7 @@ export function normalizeAmazonOrder(amazonPayload, config = {}) {
       }
     },
     shippingAddress: {
+      address_type: 'shipping',
       name: address?.Name || customerName,
       phone: address?.Phone || null,
       address_line1: address?.AddressLine1 || '',
@@ -222,6 +241,7 @@ export function normalizeAmazonOrder(amazonPayload, config = {}) {
       raw_address: { address }
     },
     billingAddress: {
+      address_type: 'billing',
       name: address?.Name || customerName,
       phone: address?.Phone || null,
       address_line1: address?.AddressLine1 || '',

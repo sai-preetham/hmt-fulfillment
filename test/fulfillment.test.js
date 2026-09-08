@@ -116,6 +116,11 @@ test('moves delivered shipment summaries to installation follow-up', () => {
   assert.equal(summary.internal_status, 'installation_pending');
 });
 
+test('does not cancel an entire order from one cancelled shipment summary', () => {
+  const summary = buildOrderShipmentSummary({ status: 'cancelled', waybill: 'awb-1' });
+  assert.equal(Object.hasOwn(summary, 'internal_status'), false);
+});
+
 test('lists configured courier adapters', () => {
   assert.equal(getCourierAdapter('delhivery').code, 'delhivery');
   assert.equal(getCourierAdapter('shiprocket').code, 'shiprocket');

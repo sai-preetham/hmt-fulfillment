@@ -1,0 +1,16 @@
+[Unit]
+Description=Keep the Wix Delhivery WhatsApp linked device connected
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=saipi
+Group=saipi
+EnvironmentFile=/home/saipi/wixdelhivery/.env
+ExecStart=/usr/local/bin/wacli sync --follow
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

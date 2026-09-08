@@ -1,0 +1,11 @@
+[Unit]
+Description=Check main for a validated HMT release every minute
+
+[Timer]
+OnBootSec=90s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=wixdelhivery-deploy.service
+
+[Install]
+WantedBy=timers.target
