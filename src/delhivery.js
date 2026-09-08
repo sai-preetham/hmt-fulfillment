@@ -197,7 +197,13 @@ export async function createDelhiveryPickupRequest(input, config) {
   if (!Number.isInteger(expected_package_count) || expected_package_count < 1) missing.push('expected package count');
   if (missing.length) throw new Error(`Pickup request requires ${missing.join(', ')}.`);
 
-  const response = await fetch(config.delhivery.pickupRequestUrl, {
+  const pickupRequestUrl = (config.delhivery || {}).pickupRequestUrl || (
+    (config.delhivery || {}).env === 'production'
+      ? 'https://track.delhivery.com/fm/request/new/'
+      : 'https://staging-express.delhivery.com/fm/request/new/'
+  );
+  if (!pickupRequestUrl) throw new Error('Delhivery pickup request URL is not configured.');
+  const response = await fetch(pickupRequestUrl, {
     method: 'POST',
     headers: {
       Authorization: `Token ${config.delhivery.token}`,
@@ -212,10 +218,17 @@ export async function createDelhiveryPickupRequest(input, config) {
     })
   });
   const body = await safeJson(response);
-  if (!response.ok || isDelhiveryFailure(body)) {
-    throw new Error(`Delhivery pickup request failed${response.ok ? '' : ` (${response.status})`}: ${JSON.stringify(body)}`);
+  let pickupId = body?.pickup_id ?? body?.pickupId ?? body?.data?.pickup_id ?? null;
+  const detailText = [body?.message, body?.error, body?.detail, body].map((value) => typeof value === 'string' ? value : JSON.stringify(value || {})).join(' ');
+  const existingMatch = detailText.match(/Pickup Request[^0-9]*([0-9]+)/i);
+  if (pickupId == null && existingMatch) pickupId = existingMatch[1];
+  if (pickupId != null && (body?.pr_exist || /Already Exist/i.test(detailText))) {
+    return { ...body, pickup_id: pickupId, pickup_id_text: String(pickupId), already_existed: true };
   }
-  return body;
+  if (!response.ok || pickupId == null || isDelhiveryFailure(body)) {
+    throw new Error(`Delhivery pickup request failed${response.ok ? '' : ` (${response.status})`}: ${detailText}`);
+  }
+  return { ...body, pickup_id: pickupId, pickup_id_text: String(pickupId) };
 }
 
 export async function calculateDelhiveryCharge({ destinationPincode, weightGrams, mode, status }, config) {

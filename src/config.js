@@ -52,7 +52,7 @@ export function getConfig() {
       env: delhiveryEnv,
       token: process.env.DELHIVERY_API_TOKEN || '',
       clientName: process.env.DELHIVERY_CLIENT_NAME || '',
-      pickupLocation: process.env.DELHIVERY_PICKUP_LOCATION || '',
+      pickupLocation: process.env.DELHIVERY_PICKUP_LOCATION || 'Sis Vars',
       pickupPincode: process.env.DELHIVERY_PICKUP_PINCODE || '',
       returnName: process.env.DELHIVERY_RETURN_NAME || process.env.DELHIVERY_PICKUP_LOCATION || '',
       returnAddress: process.env.DELHIVERY_RETURN_ADDRESS || '',
