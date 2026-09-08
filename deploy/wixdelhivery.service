@@ -11,7 +11,8 @@ WorkingDirectory=/home/saipi/wixdelhivery
 Environment=NODE_ENV=production
 Environment=AUTH_REQUIRED=true
 EnvironmentFile=-/home/saipi/wixdelhivery/.release.env
-ExecStart=/usr/bin/npm start
+ExecStart=/usr/bin/node /home/saipi/wixdelhivery/node_modules/next/dist/bin/next start
+TimeoutStopSec=20
 Restart=always
 RestartSec=5
 
