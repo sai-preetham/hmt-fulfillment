@@ -4,8 +4,8 @@
  * Periodically fetches live shipment status from the Delhivery tracking API
  * for all active booked shipments, saves events to `shipment_events`, and
  * updates `shipments.status` + `orders.shipment_status`.
- *
- * No Wix push-back — status changes stay internal only.
+ * Once a carrier reports pickup (or a later state), Wix is updated with the
+ * tracking info and fulfillment in the same operation.
  */
 
 import { isSupabaseConfigured } from './supabase.js';
@@ -14,6 +14,7 @@ import {
   saveTrackingEvents,
   updateShipmentTracking
 } from './store.js';
+import { isPickedUpOrLater, markShipmentPickedUpInWix, rollbackCancelledShipmentInWix } from './wixShipmentSync.js';
 import {
   extractShiprocketTrackingEvents,
   fetchShiprocketTracking,
@@ -103,10 +104,12 @@ export function normalizeDelhiveryStatus(delhiveryStatus) {
   if (s.includes('dispatched')) return 'dispatched';
   if (s.includes('picked up') || s === 'pickup') return 'picked-up';
   if (s.includes('manifested') || s === 'booked') return 'booked';
+  // Delhivery reports a shipment cancelled before handover as "Not Picked".
+  // It is terminal, not an in-transit scan.
+  if (s.includes('not picked') || s.includes('cancelled') || s.includes('canceled')) return 'cancelled';
   if (
     s.includes('failed delivery') ||
     s.includes('pickup error') ||
-    s.includes('cancelled') ||
     s.includes('lost')
   )
     return 'failed';
@@ -167,6 +170,7 @@ export function createDelhiveryTrackingSync(config, options = {}) {
   const logger = options.logger || console;
   const setTimer = options.setTimer || setInterval;
   const clearTimer = options.clearTimer || clearInterval;
+  const onShipmentStatusChanged = options.onShipmentStatusChanged || null;
   let timer = null;
 
   const state = {
@@ -321,6 +325,37 @@ async function pollCourierTracking(courierCode, activeShipments, batchSize, conf
         logger.log?.(
           `[tracking] ${courierCode} AWB ${shipment.waybill}: ${shipment.status} → ${liveStatus}${location ? ` (${location})` : ''}`
         );
+        if (onShipmentStatusChanged) {
+          try {
+            await onShipmentStatusChanged({ ...shipment, status: liveStatus, tracking_url: shipment.tracking_url || '' });
+          } catch (error) {
+            const warning = `[tracking] ${courierCode} AWB ${shipment.waybill}: status-update callback failed: ${error.message}`;
+            state.lastWarnings.push(warning);
+            logger.error?.(warning);
+          }
+        }
+      }
+
+      if (liveStatus && isPickedUpOrLater(liveStatus)) {
+        try {
+          const result = await markShipmentPickedUpInWix({ ...shipment, status: liveStatus }, config);
+          if (result) logger.log?.(`[tracking] ${courierCode} AWB ${shipment.waybill}: Wix fulfillment synced after pickup`);
+        } catch (error) {
+          const warning = `[tracking] ${courierCode} AWB ${shipment.waybill}: Wix fulfillment sync failed: ${error.message}`;
+          state.lastWarnings.push(warning);
+          logger.error?.(warning);
+        }
+      }
+
+      if (liveStatus === 'cancelled') {
+        try {
+          const result = await rollbackCancelledShipmentInWix({ ...shipment, status: liveStatus }, config);
+          if (result) logger.log?.(`[tracking] ${courierCode} AWB ${shipment.waybill}: Wix fulfillment removed after cancellation`);
+        } catch (error) {
+          const warning = `[tracking] ${courierCode} AWB ${shipment.waybill}: Wix fulfillment rollback failed: ${error.message}`;
+          state.lastWarnings.push(warning);
+          logger.error?.(warning);
+        }
       }
     }
   }
@@ -342,7 +377,8 @@ const STATUS_ORDER = [
   'out-for-delivery',
   'delivered',
   'rto',
-  'failed'
+  'failed',
+  'cancelled'
 ];
 
 export function groupShipmentsByCourier(shipments) {
@@ -420,12 +456,14 @@ function extractCourierTrackingEvents(courierCode, pkg) {
 function shouldUpdateStatus(current, next) {
   if (!next || current === next) return false;
   // Terminal states — don't overwrite
-  if (['delivered', 'rto', 'failed'].includes(current)) return false;
+  if (['delivered', 'rto', 'failed', 'cancelled'].includes(current)) return false;
   const currentRank = STATUS_ORDER.indexOf(current);
   const nextRank = STATUS_ORDER.indexOf(next);
   // Allow update if next is further along, or if next is a special terminal state
   if (nextRank === -1) return true; // unknown next, still allow
   if (currentRank === -1) return true; // unknown current, allow
+  // A cancellation can be reported after a prior in-transit scan.
+  if (next === 'cancelled') return true;
   return nextRank > currentRank;
 }
 

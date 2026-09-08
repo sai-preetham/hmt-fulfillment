@@ -11,6 +11,8 @@ test('normalizes Amazon order payload correctly', () => {
   assert.equal(normalized.customer.email, 'sneha@example.com');
   assert.equal(normalized.customer.phone, '+919988776655');
   assert.equal(normalized.shippingAddress.address_line1, 'A-503 Green Park Society, Baner Road');
+  assert.equal(normalized.shippingAddress.address_type, 'shipping');
+  assert.equal(normalized.billingAddress.address_type, 'billing');
   assert.equal(normalized.shippingAddress.city, 'Pune');
   assert.equal(normalized.shippingAddress.postal_code, '411045');
   assert.equal(normalized.order.source, 'amazon');

@@ -4,7 +4,24 @@ let cachedShipToken = '';
 let shipTokenExpiresAt = 0;
 
 export function mapWixOrderToFedexShipment(order, config, options = {}) {
-  return buildFedexShipmentPayload({ raw_order: order, fedex_payload: options.fedexPayload || {} }, config, {
+  const delivery = options.deliveryOverride || {};
+  const contact = delivery.contact || {};
+  return buildFedexShipmentPayload({
+    raw_order: order,
+    fedex_payload: options.fedexPayload || {},
+    // The CRM shipping address is the authoritative destination when present.
+    // Do not use billing information for a shipment recipient.
+    shipping_address: {
+      name: [contact.firstName, contact.lastName].filter(Boolean).join(' '),
+      phone: contact.phone,
+      address_line1: delivery.address?.addressLine,
+      address_line2: delivery.address?.addressLine2,
+      city: delivery.address?.city,
+      state: delivery.address?.subdivision,
+      postal_code: delivery.address?.postalCode,
+      country: delivery.address?.country
+    }
+  }, config, {
     orderNumber: options.orderNumberOverride || order?.number || order?.id || ''
   });
 }

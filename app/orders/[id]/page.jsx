@@ -5,9 +5,11 @@ import { OrderDetailForm } from '@/components/order-detail-form';
 import { OrderContents } from '@/components/order-contents';
 import { PackingForm } from '@/components/packing-form';
 import { ShipmentForm } from '@/components/shipment-form';
+import { ShipmentActions } from '@/components/shipment-actions';
+import { ShippingLabelUpload } from '@/components/shipping-label-upload';
 import { StatusPill } from '@/components/status-pill';
 import { COMMUNICATION_TYPES } from '@/lib/crm/constants';
-import { formatCurrency, getOrder } from '@/lib/crm/data';
+import { formatCurrency, getOrder, shipmentFailureReason } from '@/lib/crm/data';
 import { getCrmSettings } from '@/lib/crm/data-settings';
 
 export default async function OrderDetailPage({ params, searchParams }) {
@@ -21,7 +23,10 @@ export default async function OrderDetailPage({ params, searchParams }) {
     : '';
   const paid = ['PAID', 'APPROVED', 'paid', 'approved'].includes(order.payment_status);
   const canPack = paid && ['new', 'awaiting_packing', 'packed'].includes(order.internal_status);
-  const canBookShipment = paid && !['cancelled', 'not_paid', 'fulfilled_no_tracking', 'completed'].includes(order.internal_status);
+  // A paid order may need additional shipment legs after its original fulfillment
+  // (for example, a replacement, reverse pickup, or RTO). Keep booking available
+  // for those orders; cancelled and unpaid orders remain ineligible.
+  const canBookShipment = paid && !['cancelled', 'not_paid'].includes(order.internal_status);
   const communicationOptions = COMMUNICATION_TYPES.filter(([type]) => {
     if (type === 'tracking-link') return Boolean(order.tracking_url || order.awb_number);
     if (type === 'feedback-request' || type === 'review-request') return ['delivered', 'installation_pending', 'completed', 'fulfilled_no_tracking'].includes(order.internal_status);
@@ -49,6 +54,7 @@ export default async function OrderDetailPage({ params, searchParams }) {
   const trackingUrl = order.tracking_url || latestShipment?.tracking_url || latestShipment?.trackingUrl || '';
   const awb = order.awb_number || latestShipment?.waybill || latestShipment?.awb_number || '';
   const courier = order.courier || latestShipment?.courier_code || latestShipment?.courier || '';
+  const labelUrl = order.label_url || latestShipment?.label_url || (latestShipment?.id ? `/api/crm/shipments/${latestShipment.id}/label-file` : '');
   const deliveryMode = deliveryModeDetails(order.delivery_method);
   const installationMode = installationModeDetails(order.installation_method, order.install_location);
 
@@ -63,6 +69,8 @@ export default async function OrderDetailPage({ params, searchParams }) {
         <div className="toolbar">
           <Link className="button secondary" href={`/api/crm/orders/${order.id}/invoice`} target="_blank">Generate invoice</Link>
           <Link className="button secondary" href={`/api/crm/orders/${order.id}/invoice?format=international-label`} target="_blank">10x15 invoice</Link>
+          {labelUrl ? <Link className="button secondary" href={labelUrl} target="_blank">Shipping label</Link> : null}
+          <ShippingLabelUpload orderId={order.id} shipments={shipments} />
           {trackingUrl ? <Link className="button secondary" href={trackingUrl} target="_blank">Tracking</Link> : null}
           {chatwootUrl ? <Link className="button" href={chatwootUrl} target="_blank">Open Chatwoot</Link> : <span className="pill neutral">Chatwoot not linked</span>}
         </div>
@@ -86,6 +94,7 @@ export default async function OrderDetailPage({ params, searchParams }) {
           <strong>{courier || 'No courier'}</strong>
           <small>{awb || 'No AWB'}</small>
         </article>
+        <article className="card metric"><span>Wix delivery option</span><strong>{order.selected_shipping_title || 'Not provided'}</strong><small>{order.shipping_amount ? formatCurrency(order.shipping_amount, order.currency) : 'No shipping charge recorded'}</small></article>
         <article className="card metric"><span>Shipment</span><StatusPill value={order.shipment_status || latestShipment?.status || 'not_booked'} /><small>{formatDateTime(order.shipment_booked_at || latestShipment?.created_at) || 'Not booked'}</small></article>
         <article className="card metric"><span>Installation</span><StatusPill value={order.installation_status} /></article>
         <article className="card metric"><span>Feedback</span><StatusPill value={order.feedback_status} /></article>
@@ -221,10 +230,11 @@ export default async function OrderDetailPage({ params, searchParams }) {
           <div className="panelBody">
             <div className="shippingOverview">
               <DetailRow label="Courier" value={courier || '-'} />
+              <DetailRow label="Wix delivery option" value={order.selected_shipping_title || '-'} />
               <DetailRow label="AWB" value={awb || '-'} />
               <DetailRow label="Current status" value={<StatusPill value={order.shipment_status || latestShipment?.status || 'not_booked'} />} />
               <DetailRow label="Tracking link" value={trackingUrl ? <Link href={trackingUrl} target="_blank">Open tracking</Link> : '-'} />
-              <DetailRow label="Label" value={order.label_url || latestShipment?.label_url ? <Link href={order.label_url || latestShipment?.label_url} target="_blank">Open label</Link> : order.label_error || latestShipment?.label_error || '-'} danger={Boolean(order.label_error || latestShipment?.label_error)} />
+              <DetailRow label="Label" value={labelUrl ? <Link href={labelUrl} target="_blank">Open label</Link> : order.label_error || latestShipment?.label_error || '-'} danger={Boolean(order.label_error || latestShipment?.label_error)} />
               <DetailRow label="Wix fulfillment" value={order.wix_fulfillment_id || 'Not available'} />
             </div>
             <div className="shippingWorkspaceGrid">
@@ -241,19 +251,23 @@ export default async function OrderDetailPage({ params, searchParams }) {
                       <th>AWB</th>
                       <th>Status</th>
                       <th>Service</th>
+                      <th>Reason</th>
                       <th>Label</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {shipments.map(shipment => (
                       <tr key={shipment.id || `${shipment.waybill}-${shipment.created_at}`}>
                         <td>{formatDateTime(shipment.updated_at || shipment.created_at) || '-'}</td>
-                        <td><span className="pill neutral">{shipmentTypeLabel(shipment.shipment_type, shipment.direction)}</span></td>
+                        <td><span className="pill neutral">{shipmentTypeLabel(shipment.shipment_type, shipment.direction, shipment.carrier_response?.replacement_part)}</span></td>
                         <td>{shipment.courier_code || shipment.courier || '-'}</td>
                         <td>{shipment.waybill || shipment.awb_number || '-'}</td>
                         <td><StatusPill value={shipment.status || 'not_set'} /></td>
                         <td>{shipment.service_code || shipment.service_mode || '-'}</td>
+                        <td className={shipmentFailureReason(shipment) ? 'dangerText' : ''}>{shipmentFailureReason(shipment) || '-'}</td>
                         <td>{shipment.label_url ? <Link href={shipment.label_url} target="_blank">Open</Link> : shipment.label_error || '-'}</td>
+                        <td><ShipmentActions orderId={order.id} shipment={shipment} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -263,7 +277,7 @@ export default async function OrderDetailPage({ params, searchParams }) {
               </div>
               <div className="shipmentBooking">
                 <h3>Book another shipment</h3>
-                {canBookShipment ? <ShipmentForm order={order} shipments={shipments} packageDefaults={crmSettings.shipment_defaults.domestic} /> : <p className="muted">Shipment booking is not available for this order status.</p>}
+                {canBookShipment ? <ShipmentForm order={order} shipments={shipments} packageDefaults={crmSettings.shipment_defaults.domestic} pickupLocation={crmSettings.pickup_defaults.pickupLocation} /> : <p className="muted">Shipment booking is not available for this order status.</p>}
               </div>
             </div>
           </div>
@@ -437,8 +451,11 @@ function feedbackLabel(value) {
   return labels[value] || 'Feedback not started';
 }
 
-function shipmentTypeLabel(type, direction) {
-  if (type === 'replacement') return 'Replacement';
+function shipmentTypeLabel(type, direction, replacementPart = '') {
+  if (type === 'replacement') {
+    const part = String(replacementPart || '').replaceAll('_', ' ').trim();
+    return part ? `Replacement · ${part.replace(/\b\w/g, character => character.toUpperCase())}` : 'Replacement';
+  }
   if (type === 'reverse') return 'Reverse pickup';
   if (type === 'rto') return 'RTO';
   if (direction === 'reverse') return 'Reverse';

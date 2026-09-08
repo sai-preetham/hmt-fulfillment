@@ -158,6 +158,34 @@ test('uses latest shipment waybill as invoice AWB when order AWB is missing', ()
   assert.equal(model.invoice.awb, 'LATEST-AWB');
 });
 
+test('international label uses selected line-item quantity and adds destination calling code', () => {
+  const pdf = buildInvoicePdf({
+    order: {
+      order_number: '10452',
+      quantity: 1,
+      customer_name: 'Export Buyer',
+      shipping_phone: '0479 091 713',
+      shipping_country: 'AU',
+      order_date: '2026-07-16T00:00:00.000Z',
+      order_value: 34997,
+      shipping_amount: 2999,
+      currency: 'INR'
+    },
+    items: [{
+      product_name: 'RE Himalayan 450 - Cruise Control Kit',
+      hsn_code: '90328910',
+      quantity: 2,
+      item_price: 15999,
+      total_price: 31998
+    }]
+  }, { format: 'international-label' }).toString('latin1');
+
+  assert.match(pdf, /Qty 2/);
+  assert.match(pdf, /Phone  \+61479091713/);
+  assert.match(pdf, /Tel: \+918904137604/);
+  assert.match(pdf, /Unit price  INR 15999\.00/);
+});
+
 test('omits AWB row when no order or shipment AWB exists', () => {
   const pdf = buildInvoicePdf({
     order: {
@@ -280,4 +308,108 @@ test('renders buyer GST and both address sections even when fields are incomplet
   assert.match(pdf, /Address not provided/);
   assert.match(pdf, /Ship Customer/);
   assert.match(pdf, /12 Shipping Road/);
+});
+
+test('renders a readable 10x15 international invoice with a side-by-side reference header', () => {
+  const pdf = buildInvoicePdf({
+    order: {
+      id: 'order-international-label',
+      order_number: '10408',
+      customer_name: 'Export Buyer',
+      shipping_name: 'Export Buyer',
+      shipping_address_line1: '15 Shipping Road',
+      shipping_city: 'Oslo',
+      shipping_country: 'Norway',
+      order_date: '2026-06-12T08:00:00.000Z',
+      order_value: 100,
+      currency: 'USD'
+    },
+    items: [{
+      product_name: 'HMT Cruise Kit',
+      hsn_code: '87141090',
+      quantity: 1,
+      item_price: 100,
+      total_price: 100
+    }]
+  }, { format: 'international-label' }).toString('latin1');
+
+  assert.match(pdf, /\/MediaBox \[0 0 283\.465 425\.197\]/);
+  assert.match(pdf, /TAX INVOICE/);
+  assert.match(pdf, /\(INVOICE\) Tj/);
+  assert.match(pdf, /\(10408\) Tj/);
+  assert.match(pdf, /CONSIGNEE \/ SHIP TO/);
+  assert.match(pdf, /TOTAL TO DECLARE/);
+  assert.match(pdf, /EXPORTER & EXPORT DETAILS/);
+  assert.match(pdf, /Place of supply India/);
+  // Thermal labels need bold hierarchy; ensure Helvetica-Bold is used.
+  assert.match(pdf, /\/F2 [\d.]+ Tf/);
+  // Avoid pale/blue fills that wash out on monochrome thermal printers.
+  assert.doesNotMatch(pdf, /0\.02 0\.24 0\.45 rg/);
+  assert.doesNotMatch(pdf, /0\.94 0\.97 0\.99 rg/);
+});
+
+test('10x15 invoice shows the main product instead of a mirror mount accessory', () => {
+  const pdf = buildInvoicePdf({
+    order: {
+      id: 'order-main-plus-mount',
+      order_number: '10409',
+      customer_name: 'Export Buyer',
+      shipping_country: 'Norway',
+      order_date: '2026-07-23T08:00:00.000Z',
+      order_value: 16198,
+      currency: 'INR'
+    },
+    items: [
+      {
+        product_name: 'RE Himalayan 450 Cruise Control Kit',
+        hsn_code: '90328910',
+        quantity: 1,
+        item_price: 15999,
+        total_price: 15999
+      },
+      {
+        product_name: 'Hold My Throttle Mirror Mount',
+        hsn_code: '87141090',
+        quantity: 1,
+        item_price: 199,
+        total_price: 199
+      }
+    ]
+  }, { format: 'international-label' }).toString('latin1');
+
+  assert.match(pdf, /RE Himalayan 450 Cruise Control Kit/);
+  assert.doesNotMatch(pdf, /Hold My Throttle Mirror Mount/);
+});
+
+test('10x15 invoice shows the highest-value item when the order contains only accessories', () => {
+  const pdf = buildInvoicePdf({
+    order: {
+      id: 'order-accessories-only',
+      order_number: '10410',
+      customer_name: 'Export Buyer',
+      shipping_country: 'Norway',
+      order_date: '2026-07-23T08:00:00.000Z',
+      order_value: 698,
+      currency: 'INR'
+    },
+    items: [
+      {
+        product_name: 'Mirror Mount Accessory',
+        hsn_code: '87141090',
+        quantity: 1,
+        item_price: 199,
+        total_price: 199
+      },
+      {
+        product_name: 'Handlebar Accessory',
+        hsn_code: '87141090',
+        quantity: 1,
+        item_price: 499,
+        total_price: 499
+      }
+    ]
+  }, { format: 'international-label' }).toString('latin1');
+
+  assert.match(pdf, /Handlebar Accessory/);
+  assert.doesNotMatch(pdf, /Mirror Mount Accessory/);
 });

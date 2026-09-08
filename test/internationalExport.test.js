@@ -207,6 +207,7 @@ test('builds Excel-compatible workbook for FedEx.com batch upload', () => {
   assert.match(workbookText, /FEDEX_INTERNATIONAL_PRIORITY/);
   assert.match(workbookText, /Ada Lovelace/);
   assert.match(workbookText, /YOUR_PACKAGING/);
+  assert.match(workbookText, /<c r="P2" t="inlineStr"><is><t>\+14155550100<\/t><\/is><\/c>/);
 });
 
 test('uses xlsx extension for FedEx batch upload filenames', () => {

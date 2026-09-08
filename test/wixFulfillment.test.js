@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildTrackingUrl, createWixFulfillment } from '../src/wixFulfillment.js';
+import { buildTrackingUrl, createWixFulfillment, deleteWixFulfillment, updateWixFulfillmentTracking } from '../src/wixFulfillment.js';
 
 test('creates Wix fulfillment with awb tracking details', async () => {
   const originalFetch = globalThis.fetch;
@@ -39,8 +39,62 @@ test('creates Wix fulfillment with awb tracking details', async () => {
   }
 });
 
+test('reads a fulfillment ID from Wix order-with-fulfillments responses', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    text: async () => JSON.stringify({ orderWithFulfillments: { fulfillments: [{ id: 'fulfillment-2', trackingInfo: { trackingNumber: 'awb-1' } }] } })
+  });
+  try {
+    const result = await createWixFulfillment({ wix_order_id: 'wix-order-1', raw_order: { lineItems: [] } }, { waybill: 'awb-1' }, config());
+    assert.equal(result.fulfillmentId, 'fulfillment-2');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('builds tracking url from template', () => {
   assert.equal(buildTrackingUrl('awb 1', config()), 'https://track.example/awb%201');
+});
+
+test('updates tracking on an existing Wix fulfillment for a rebooked shipment', async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, options, body: JSON.parse(options.body) };
+    return { ok: true, text: async () => JSON.stringify({ fulfillment: { id: 'fulfillment-1' } }) };
+  };
+  try {
+    const result = await updateWixFulfillmentTracking(
+      { wix_order_id: 'wix-order-1' },
+      'fulfillment-1',
+      { waybill: 'awb-new', courier_code: 'delhivery', service_mode: 'Express' },
+      config()
+    );
+    assert.equal(result.fulfillmentId, 'fulfillment-1');
+    assert.equal(request.options.method, 'PATCH');
+    assert.equal(request.url, 'https://www.wixapis.com/ecom/v1/fulfillments/fulfillment-1/orders/wix-order-1');
+    assert.equal(request.body.fulfillment.trackingInfo.trackingNumber, 'awb-new');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('deletes a Wix fulfillment for a cancelled shipment', async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, options };
+    return { ok: true, text: async () => '' };
+  };
+  try {
+    const result = await deleteWixFulfillment({ wix_order_id: 'wix-order-1' }, 'fulfillment-1', config());
+    assert.equal(result.status, 'deleted');
+    assert.equal(request.options.method, 'DELETE');
+    assert.equal(request.url, 'https://www.wixapis.com/ecom/v1/fulfillments/fulfillment-1/orders/wix-order-1');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 function config() {

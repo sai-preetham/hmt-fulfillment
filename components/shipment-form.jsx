@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { BOOKING_COURIERS, COURIERS } from '@/lib/crm/constants';
 
-export function ShipmentForm({ order, shipments = [], packageDefaults = {} }) {
+export function ShipmentForm({ order, shipments = [], packageDefaults = {}, pickupLocation = '' }) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [labelBusy, setLabelBusy] = useState(false);
@@ -11,8 +11,16 @@ export function ShipmentForm({ order, shipments = [], packageDefaults = {} }) {
   const [fedexRate, setFedexRate] = useState(null);
   const [courier, setCourier] = useState(order.courier || defaultCourierForOrder(order));
   const [shipmentType, setShipmentType] = useState('original');
+  const [replacementPart, setReplacementPart] = useState('');
+  const [selectedPickupLocation, setSelectedPickupLocation] = useState(pickupLocation || 'Sis Vars');
   const [labelUrl, setLabelUrl] = useState(order.label_url || '');
   const [awbNumber, setAwbNumber] = useState(order.awb_number || '');
+  const [deliveryDetails, setDeliveryDetails] = useState({
+    phone: order.phone || '',
+    pincode: order.pincode || '',
+    addressLine1: order.address_line1 || ''
+  });
+  const [needsDeliveryFix, setNeedsDeliveryFix] = useState(false);
   const selectedBookingCourier = BOOKING_COURIERS.find(item => item.code === courier);
   const services = selectedBookingCourier?.services || [];
   const canGenerateLabel = Boolean(labelUrl || awbNumber);
@@ -22,6 +30,7 @@ export function ShipmentForm({ order, shipments = [], packageDefaults = {} }) {
   async function submit(event) {
     event.preventDefault();
     setMessage('');
+    setNeedsDeliveryFix(false);
     const submitter = event.nativeEvent.submitter;
     const form = new FormData(event.currentTarget);
     const body = Object.fromEntries(form.entries());
@@ -36,20 +45,27 @@ export function ShipmentForm({ order, shipments = [], packageDefaults = {} }) {
     if (shipmentType !== 'original') body.allow_multiple_shipments = 'true';
     if (['reverse', 'rto'].includes(shipmentType)) body.service_code = 'reverse_pickup';
     setBusy(true);
-    const response = await fetch(`/api/crm/orders/${order.id}/shipment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    const data = await response.json();
-    setBusy(false);
-    if (!response.ok) {
-      setMessage((data.validation || [data.error || 'Shipment booking failed']).join(', '));
-      return;
+    try {
+      const response = await fetch(`/api/crm/orders/${order.id}/shipment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = (data.validation || [data.error || 'Shipment booking failed']).join(', ');
+        setMessage(error);
+        setNeedsDeliveryFix(/pincode|phone|address/i.test(error));
+        return;
+      }
+      if (data.label_url) setLabelUrl(data.label_url);
+      if (data.awb_number) setAwbNumber(data.awb_number);
+      setMessage(data.demo ? 'Validated in demo mode. Configure courier credentials and Supabase to persist.' : data.message || 'Shipment saved.');
+    } catch {
+      setMessage('Shipment booking could not be completed. Please check your connection and try again.');
+    } finally {
+      setBusy(false);
     }
-    if (data.label_url) setLabelUrl(data.label_url);
-    if (data.awb_number) setAwbNumber(data.awb_number);
-    setMessage(data.demo ? 'Validated in demo mode. Configure courier credentials and Supabase to persist.' : data.message || 'Shipment saved.');
   }
 
   async function openOrGenerateLabel(event) {
@@ -63,20 +79,33 @@ export function ShipmentForm({ order, shipments = [], packageDefaults = {} }) {
       setMessage('AWB is required before generating a shipping label.');
       return;
     }
+    // Open synchronously so browsers do not block the label as a popup. The tab
+    // is navigated only after the carrier confirms a usable label URL.
+    const labelWindow = window.open('', '_blank');
+    if (labelWindow) labelWindow.opener = null;
     setLabelBusy(true);
-    const response = await fetch(`/api/crm/orders/${order.id}/label`, { method: 'POST' });
-    const data = await response.json();
-    setLabelBusy(false);
-    if (!response.ok) {
-      setMessage(data.error || 'Label generation failed.');
-      return;
-    }
-    if (data.label_url) {
-      setLabelUrl(data.label_url);
-      window.open(data.label_url, '_blank', 'noopener,noreferrer');
-      setMessage('Label opened in a new tab.');
-    } else {
-      setMessage('No label URL was returned by the courier.');
+    try {
+      const response = await fetch(`/api/crm/orders/${order.id}/label`, { method: 'POST' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        labelWindow?.close();
+        setMessage(data.error || 'Label generation failed.');
+        return;
+      }
+      if (data.label_url) {
+        setLabelUrl(data.label_url);
+        if (labelWindow) labelWindow.location.replace(data.label_url);
+        else window.open(data.label_url, '_blank', 'noopener,noreferrer');
+        setMessage('Label opened in a new tab.');
+      } else {
+        labelWindow?.close();
+        setMessage('No label URL was returned by the courier.');
+      }
+    } catch {
+      labelWindow?.close();
+      setMessage('Label generation could not be completed. Please try again.');
+    } finally {
+      setLabelBusy(false);
     }
   }
 
@@ -117,14 +146,42 @@ export function ShipmentForm({ order, shipments = [], packageDefaults = {} }) {
 
   return (
     <form className="formGrid shipmentBookingForm" action={`/api/crm/orders/${order.id}/shipment`} method="post" onSubmit={submit}>
-      <input type="hidden" name="phone" value={order.phone || ''} />
-      <input type="hidden" name="pincode" value={order.pincode || ''} />
+      {needsDeliveryFix ? (
+        <div className="shipmentSource full" role="alert">
+          <div>
+            <strong>Fix the delivery details, then retry booking</strong>
+            <p className="muted">The courier rejected one or more delivery fields. Your entered values stay in this form for the retry.</p>
+          </div>
+        </div>
+      ) : null}
+      {needsDeliveryFix ? (
+        <>
+          <label>
+            <span>Recipient phone</span>
+            <input name="phone" value={deliveryDetails.phone} onChange={event => setDeliveryDetails(details => ({ ...details, phone: event.target.value }))} required />
+          </label>
+          <label>
+            <span>Delivery pincode</span>
+            <input name="pincode" value={deliveryDetails.pincode} onChange={event => setDeliveryDetails(details => ({ ...details, pincode: event.target.value }))} inputMode="numeric" required />
+          </label>
+          <label className="full">
+            <span>Delivery address</span>
+            <input name="address_line1" value={deliveryDetails.addressLine1} onChange={event => setDeliveryDetails(details => ({ ...details, addressLine1: event.target.value }))} required />
+          </label>
+        </>
+      ) : (
+        <>
+          <input type="hidden" name="phone" value={deliveryDetails.phone} />
+          <input type="hidden" name="pincode" value={deliveryDetails.pincode} />
+          <input type="hidden" name="address_line1" value={deliveryDetails.addressLine1} />
+        </>
+      )}
       <input type="hidden" name="country" value={order.country || 'IN'} />
-      <input type="hidden" name="address_line1" value={order.address_line1 || ''} />
       <div className="shipmentSource full">
         <div>
           <strong>{wixShipmentAvailable ? 'Wix shipment data found' : 'No Wix shipment found'}</strong>
           <p className="muted">{wixShipmentAvailable ? [order.courier, order.awb_number, order.wix_fulfillment_id].filter(Boolean).join(' · ') : 'Book a new shipment or save a manual AWB below.'}</p>
+          {order.selected_shipping_title ? <p className="muted">Wix delivery option: <strong>{order.selected_shipping_title}</strong></p> : null}
         </div>
         {order.tracking_url ? <a className="button secondary" href={order.tracking_url} target="_blank" rel="noreferrer">Open Wix tracking</a> : null}
       </div>
@@ -137,9 +194,27 @@ export function ShipmentForm({ order, shipments = [], packageDefaults = {} }) {
           <option value="rto">RTO movement</option>
         </select>
       </label>
+      {shipmentType === 'replacement' ? (
+        <label>
+          <span>Replacement part</span>
+          <select name="replacement_part" value={replacementPart} onChange={event => setReplacementPart(event.target.value)} required>
+            <option value="" disabled>Select part</option>
+            <option value="full_kit">Full kit</option>
+            <option value="switch">Switch</option>
+            <option value="control_module">Control module</option>
+            <option value="harness">Harness</option>
+          </select>
+        </label>
+      ) : null}
       <label>
         <span>Pickup location</span>
-        <input name="pickup_location" defaultValue="Hold My Throttle HQ" />
+        <select name="pickup_location" value={selectedPickupLocation} onChange={event => setSelectedPickupLocation(event.target.value)}>
+          {!['Sis Vars', 'HSR GDP', 'Hold My Throttle HQ', 'Sai Preetham'].includes(selectedPickupLocation) ? <option value={selectedPickupLocation}>{selectedPickupLocation}</option> : null}
+          <option value="Sis Vars">Sis Vars</option>
+          <option value="HSR GDP">HSR GDP</option>
+          <option value="Hold My Throttle HQ">Hold My Throttle HQ</option>
+          <option value="Sai Preetham">Sai Preetham</option>
+        </select>
       </label>
       <label>
         <span>Courier</span>
@@ -200,7 +275,9 @@ export function ShipmentForm({ order, shipments = [], packageDefaults = {} }) {
         <p className="muted full">Direct API booking for {selectedBookingCourier.name} is not configured yet. Save the shipment with a manual AWB for now.</p>
       ) : null}
       <div className="toolbar full">
-        <button type="submit" name="booking_action" value="book_courier" disabled={busy}>{busy ? 'Booking...' : `Book ${shipmentType === 'original' ? 'shipment' : shipmentType}`}</button>
+        <button type="submit" name="booking_action" value="book_courier" disabled={busy} aria-busy={busy}>
+          {busy ? <><span className="buttonSpinner" aria-hidden="true" />Booking shipment…</> : `Book ${shipmentType === 'original' ? 'shipment' : shipmentType}`}
+        </button>
         <button type="submit" name="booking_action" value="save_manual_awb" className="secondary" disabled={busy}>Save manual AWB</button>
         <button
           type="button"

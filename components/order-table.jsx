@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import { formatCurrency } from '@/lib/crm/data';
 import { STATUS_FILTERS } from '@/lib/crm/constants';
 import { OrderContents } from './order-contents';
+import { QuickBookButton } from './quick-book-button';
 import { StatusPill } from './status-pill';
 
 export function OrderFilters({ query = '', status = '', source = '', action = '/orders', showStatus = true, showSource = true, hiddenFields = {} }) {
@@ -44,7 +45,7 @@ export function OrderFilters({ query = '', status = '', source = '', action = '/
   );
 }
 
-export function OrderTable({ orders }) {
+export function OrderTable({ orders, showQuickBook = false }) {
   return (
     <div className="tableWrap">
       <table>
@@ -53,11 +54,13 @@ export function OrderTable({ orders }) {
             <th>Order</th>
             <th>Customer</th>
             <th>Product</th>
+            <th>Wix delivery</th>
             <th>Value</th>
             <th>Wix</th>
             <th>Status</th>
             <th>Tracking</th>
             <th>Operator</th>
+            {showQuickBook ? <th>Quick book</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -79,6 +82,10 @@ export function OrderTable({ orders }) {
                 {order.bike_model ? <span className="subtle">{order.bike_model}</span> : null}
               </td>
               <td>
+                <strong>{order.selected_shipping_title || 'Not provided'}</strong>
+                {order.shipping_amount ? <span className="subtle">Shipping: {formatCurrency(order.shipping_amount, order.currency)}</span> : null}
+              </td>
+              <td>
                 {formatCurrency(order.order_value, order.currency)}
                 <span className="subtle"><StatusPill value={order.payment_status} /></span>
               </td>
@@ -97,19 +104,26 @@ export function OrderTable({ orders }) {
                 </div>
               </td>
               <td>
-                <span className="subtle">{order.courier || 'No courier'}</span>
-                <span className="subtle">{order.awb_number || 'No AWB'}</span>
-                <span className="subtle">{order.tracking_url ? 'Tracking link set' : 'No tracking link'}</span>
+                <div className="statusStack">
+                  <StatusPill value={order.shipment_status || 'not_booked'} />
+                  <span className="subtle">{order.courier ? `Courier: ${order.courier}` : 'No courier'}</span>
+                  <span className="subtle">{order.awb_number ? `AWB: ${order.awb_number}` : 'No AWB'}</span>
+                  {order.tracking_url
+                    ? <a className="subtle" href={order.tracking_url} target="_blank" rel="noreferrer">Open live tracking</a>
+                    : <span className="subtle">Tracking link unavailable</span>}
+                  <Link className="subtle" href={`/orders/${order.id}`}>Manage shipment</Link>
+                </div>
               </td>
               <td>
                 {order.assigned_operator || '-'}
                 <span className="subtle">{(order.tags || []).join(', ')}</span>
               </td>
+              {showQuickBook ? <td><QuickBookButton order={order} /></td> : null}
             </tr>
           ))}
           {!orders.length && (
             <tr>
-              <td colSpan="8" className="empty">No matching orders.</td>
+              <td colSpan={showQuickBook ? 10 : 9} className="empty">No matching orders.</td>
             </tr>
           )}
         </tbody>

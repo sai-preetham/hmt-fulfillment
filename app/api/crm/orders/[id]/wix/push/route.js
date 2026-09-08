@@ -2,35 +2,27 @@ import { NextResponse } from 'next/server';
 import { applyCrmSettingsToConfig } from '@/lib/crm/settings';
 import { getCrmSettings } from '@/lib/crm/data-settings';
 import { getConfig } from '@/src/config.js';
-import { findLatestShipmentForOrder, findOrderById } from '@/src/store.js';
-import { markOrderPackedInWix, syncShipmentTrackingToWix } from '@/src/wixShipmentSync.js';
+import { findLatestShipmentForOrder, findOrderById, findShipmentById } from '@/src/store.js';
+import { fulfillManualShipmentInWix } from '@/src/wixShipmentSync.js';
 
 export async function POST(request, { params }) {
-  const { id } = await params;
-  const body = await safeJson(request);
-  const mode = body.mode === 'fulfilled' ? 'fulfilled' : 'tracking';
-  const order = await findOrderById(id);
-  if (!order) return NextResponse.json({ ok: false, error: 'Order not found.' }, { status: 404 });
-
-  const settings = await getCrmSettings();
-  const config = applyCrmSettingsToConfig(getConfig(), settings);
-
-  if (mode === 'fulfilled') {
-    const result = await markOrderPackedInWix(id, config);
-    if (!result) return NextResponse.json({ ok: false, error: 'Booked shipment with AWB is required.' }, { status: 400 });
-    return NextResponse.json({ ok: true, mode, result, order: await findOrderById(id) });
-  }
-
-  const shipment = await findLatestShipmentForOrder(order);
-  if (!shipment?.waybill) return NextResponse.json({ ok: false, error: 'Booked shipment with AWB is required.' }, { status: 400 });
-  const result = await syncShipmentTrackingToWix(order, shipment, config);
-  return NextResponse.json({ ok: true, mode, result, order: await findOrderById(id), shipment });
-}
-
-async function safeJson(request) {
   try {
-    return await request.json();
-  } catch {
-    return {};
+    const { id } = await params;
+    const body = await request.json().catch(() => ({}));
+    if (body.mode !== 'fulfilled') return NextResponse.json({ ok: false, error: 'After pickup, use Mark fulfilled on Wix to send tracking and fulfill the order.' }, { status: 400 });
+    const order = await findOrderById(id);
+    if (!order?.wix_order_id) return NextResponse.json({ ok: false, error: 'Wix order not found.' }, { status: 404 });
+    const shipment = body.shipmentId ? await findShipmentById(body.shipmentId) : await findLatestShipmentForOrder(order);
+    if (!shipment || shipment.order_id !== order.id || !shipment.waybill || shipment.direction === 'reverse' || ['cancelled', 'canceled', 'returned', 'rto', 'failed', 'pending', 'pending-zone', 'pending-international'].includes(String(shipment.status).toLowerCase())) {
+      return NextResponse.json({ ok: false, error: 'An active outbound shipment with an AWB is required.' }, { status: 400 });
+    }
+    const config = applyCrmSettingsToConfig(getConfig(), await getCrmSettings());
+    if (!config.wix.fulfillmentSyncEnabled) return NextResponse.json({ ok: false, error: 'Enable Wix fulfillment in settings to mark this shipment fulfilled.' }, { status: 400 });
+    await fulfillManualShipmentInWix(order, shipment, config);
+    const updated = await findOrderById(id);
+    if (updated?.wix_fulfillment_status !== 'fulfilled') return NextResponse.json({ ok: false, error: updated?.wix_fulfillment_error || 'Wix fulfillment was not completed. Please retry.' }, { status: 502 });
+    return NextResponse.json({ ok: true, message: 'Wix marked fulfilled and tracking sent.', order: updated });
+  } catch (error) {
+    return NextResponse.json({ ok: false, error: error.message || 'Wix fulfillment failed.' }, { status: 500 });
   }
 }

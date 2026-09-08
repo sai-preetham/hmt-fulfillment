@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildFedexShipmentPayload, parseFedexShipmentResponse } from '../src/fedexShip.js';
+import { buildFedexShipmentPayload, mapWixOrderToFedexShipment, parseFedexShipmentResponse } from '../src/fedexShip.js';
 
 test('builds FedEx Ship API payload for international shipment', () => {
   const payload = buildFedexShipmentPayload(
@@ -81,4 +81,21 @@ test('parses FedEx Ship API response tracking and label', () => {
   assert.equal(parsed.waybill, '794612345678');
   assert.equal(parsed.labelBase64, 'JVBERi0x');
   assert.equal(parsed.labelFormat, 'PDF');
+});
+
+test('uses the CRM shipping override for the FedEx recipient', () => {
+  const payload = mapWixOrderToFedexShipment(
+    { lineItems: [] },
+    { fedex: { accountNumber: '123' }, defaults: {} },
+    {
+      deliveryOverride: {
+        address: { addressLine: '10 Shipping Street', city: 'Washington', subdivision: 'DC', postalCode: '20001', country: 'US' },
+        contact: { firstName: 'Shipping', lastName: 'Recipient', phone: '12025550123' }
+      }
+    }
+  );
+
+  assert.equal(payload.requestedShipment.recipients[0].contact.personName, 'Shipping Recipient');
+  assert.equal(payload.requestedShipment.recipients[0].address.streetLines[0], '10 Shipping Street');
+  assert.equal(payload.requestedShipment.recipients[0].address.postalCode, '20001');
 });

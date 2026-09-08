@@ -5,6 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=saipi
+Group=saipi
 WorkingDirectory=/home/saipi/wixdelhivery
 Environment=NODE_ENV=production
 Environment=AUTH_REQUIRED=true

@@ -4,6 +4,22 @@ This repository now contains a Next.js internal Operations CRM for Hold My Throt
 
 The CRM manages orders from Wix, Amazon, and manual entry; fulfillment; packing; shipment booking; pickup and delivery tracking; installation follow-up; feedback; reviews; support; tasks; integration errors; and audit history in Supabase.
 
+## WhatsApp order updates (Raspberry Pi)
+
+The automation can send one WhatsApp update for each shipment milestone: booked, picked up, dispatched, in transit, out for delivery, and delivered. It uses `wacli` as a linked WhatsApp Web device and deliberately stays disabled until explicitly enabled.
+
+On the Pi, install the `wacli` release binary for its architecture at `/usr/local/bin/wacli`, then pair it as the `saipi` user:
+
+```bash
+sudo -u saipi /usr/local/bin/wacli auth
+sudo -u saipi /usr/local/bin/wacli doctor --connect
+sudo cp deploy/wixdelhivery-wacli-sync.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now wixdelhivery-wacli-sync.service
+```
+
+Set `WACLI_ORDER_UPDATES_ENABLED=true` in `/home/saipi/wixdelhivery/.env` only after pairing a dedicated business number and confirming customer WhatsApp opt-in. Then restart `wixdelhivery.service`. The app records each outbound message in `customer_messages`, preventing duplicate updates for the same order and milestone.
+
 Detailed deliverables:
 
 - [Operations CRM architecture](docs/OPERATIONS_CRM.md)
@@ -248,6 +264,33 @@ curl -X POST http://localhost:3000/api/book-manual \
 ```
 
 ## Notes Before Production
+
+### Google Sheets sourcing export and Discord order digest
+
+The daily export reads the Wix orders already synced into Supabase. It replaces two tabs in the configured spreadsheet: `All Orders` (one row per order item) and `Sourcing View` (active, non-cancelled quantity grouped by SKU). It also posts the order count for the prior completed calendar day (00:00–24:00 in `Asia/Kolkata`) to Discord.
+
+Create a Google Cloud service account with the Google Sheets API enabled, share the target spreadsheet with that service account's email as an Editor, then add these server-only values to `.env`:
+
+```text
+GOOGLE_SHEETS_SPREADSHEET_ID=your-spreadsheet-id
+GOOGLE_SERVICE_ACCOUNT_EMAIL=service-account@project.iam.gserviceaccount.com
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"
+DISCORD_ORDERS_WEBHOOK_URL=https://discord.com/api/webhooks/...
+DISCORD_APPLICATION_PUBLIC_KEY=discord-application-public-key
+OPERATIONS_TIMEZONE=Asia/Kolkata
+DAILY_ORDER_GOAL=5
+ORDER_REPORT_CURRENCY=INR
+```
+
+The protected endpoint is `POST /api/integrations/orders/export`. `deploy/wixdelhivery-order-export.timer` invokes it every day at 00:01 (the host's local timezone); the cron fallback contains the equivalent schedule. Enable the systemd unit after deployment:
+
+```bash
+sudo cp deploy/wixdelhivery-order-export.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now wixdelhivery-order-export.timer
+```
+
+For the Discord bot command, create an application command named `orders24` in the Discord Developer Portal and set its interactions endpoint to `https://your-domain/api/integrations/discord/interactions`. Set `DISCORD_APPLICATION_PUBLIC_KEY` from the same application. Discord signs every interaction; the endpoint rejects unsigned requests.
 
 - Use HTTPS for the webhook endpoint.
 - Set `WIX_WEBHOOK_PUBLIC_KEY` or `WIX_WEBHOOK_SECRET` if your Wix webhook signing configuration exposes one.

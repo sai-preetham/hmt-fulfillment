@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { FulfillShipmentButton } from './fulfill-shipment-button';
 import { PrintLabelButton } from './print-label-button';
 import { defaultPickupWindow } from './pickup-location-groups';
 
@@ -11,7 +12,7 @@ export function ShipmentActions({ orderId, shipment }) {
   const canCancel = shipment.waybill && String(shipment.courier_code || '').toLowerCase() === 'delhivery' && !['delivered', 'cancelled', 'returned', 'rto'].includes(status);
   const canPrint = Boolean(shipment.id && shipment.waybill && String(shipment.courier_code || 'delhivery').toLowerCase() === 'delhivery');
   const canRaisePickup = canPrint && shipment.direction !== 'reverse' && !['pickup_pending', 'picked-up', 'picked_up', 'dispatched', 'in-transit', 'in_transit', 'out-for-delivery', 'out_for_delivery', 'delivered', 'cancelled', 'canceled', 'returned', 'rto'].includes(status);
-  if (!canCancel && !canPrint && !canRaisePickup) return null;
+
 
   async function cancel() {
     if (!window.confirm(`Cancel Delhivery shipment ${shipment.waybill}? This cannot be undone.`)) return;
@@ -38,5 +39,5 @@ export function ShipmentActions({ orderId, shipment }) {
     if (result.ok) window.location.reload();
   }
 
-  return <div className="shipmentActions">{canPrint ? <PrintLabelButton shipmentId={shipment.id} /> : null}{canRaisePickup ? <button type="button" className="button secondary" onClick={raisePickup} disabled={busy}>{busy ? 'Raising…' : 'Raise pickup'}</button> : null}{canCancel ? <button type="button" className="button danger" onClick={cancel} disabled={busy}>{busy ? 'Cancelling…' : 'Cancel'}</button> : null}{message ? <small className="dangerText">{message}</small> : null}</div>;
+  return <div className="shipmentActions"><FulfillShipmentButton orderId={orderId} shipment={shipment} />{canPrint ? <PrintLabelButton shipmentId={shipment.id} /> : null}{canRaisePickup ? <button type="button" className="button secondary" onClick={raisePickup} disabled={busy}>{busy ? 'Raising…' : 'Raise pickup'}</button> : null}{canCancel ? <button type="button" className="button danger" onClick={cancel} disabled={busy}>{busy ? 'Cancelling…' : 'Cancel'}</button> : null}{message ? <small className="dangerText">{message}</small> : null}</div>;
 }

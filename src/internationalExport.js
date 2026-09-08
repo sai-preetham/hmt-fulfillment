@@ -16,7 +16,11 @@ export function buildFedexBatchUploadWorkbook(orders, config = {}) {
     ...rows.map(row => FEDEX_BATCH_UPLOAD_HEADERS.map(header => row[header] ?? ''))
   ];
 
-  return createXlsxWorkbook('Overview', sheetRows);
+  // FedEx treats contact numbers and postcodes as identifiers. Keep them as
+  // text so its importer cannot coerce, truncate, or reformat their values.
+  return createXlsxWorkbook('Overview', sheetRows, {
+    textColumns: ['senderContactNumber', 'senderPostcode', 'recipientContactNumber', 'recipientPostcode']
+  });
 }
 
 export function buildFedexBatchUploadRow(order, config = {}) {
@@ -171,7 +175,7 @@ export function fedexBatchUploadFilename(batchNumber) {
   return `${safeFilenamePart(batchNumber || `fedex-${new Date().toISOString().slice(0, 10)}`)}.xlsx`;
 }
 
-function createXlsxWorkbook(sheetName, rows) {
+function createXlsxWorkbook(sheetName, rows, { textColumns = [] } = {}) {
   return createZip([
     {
       name: '[Content_Types].xml',
@@ -217,34 +221,37 @@ function createXlsxWorkbook(sheetName, rows) {
     },
     {
       name: 'xl/worksheets/sheet1.xml',
-      content: renderWorksheet(rows)
+      content: renderWorksheet(rows, textColumns)
     }
   ]);
 }
 
-function renderWorksheet(rows) {
+function renderWorksheet(rows, textColumns = []) {
   const maxColumns = Math.max(1, ...rows.map(row => row.length));
   const dimension = `A1:${columnName(maxColumns)}${Math.max(1, rows.length)}`;
+  const textColumnNumbers = rows[0]
+    .map((header, index) => textColumns.includes(header) ? index + 1 : null)
+    .filter(Boolean);
   return [
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"',
     ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
     `<dimension ref="${dimension}"/>`,
     '<sheetData>',
-    ...rows.map((row, rowIndex) => renderXlsxRow(row, rowIndex + 1)),
+    ...rows.map((row, rowIndex) => renderXlsxRow(row, rowIndex + 1, textColumnNumbers)),
     '</sheetData>',
     '</worksheet>'
   ].join('');
 }
 
-function renderXlsxRow(values, rowNumber) {
-  return `<row r="${rowNumber}">${values.map((value, index) => renderXlsxCell(value, rowNumber, index + 1)).join('')}</row>`;
+function renderXlsxRow(values, rowNumber, textColumnNumbers) {
+  return `<row r="${rowNumber}">${values.map((value, index) => renderXlsxCell(value, rowNumber, index + 1, textColumnNumbers.includes(index + 1))).join('')}</row>`;
 }
 
-function renderXlsxCell(value, rowNumber, columnNumber) {
+function renderXlsxCell(value, rowNumber, columnNumber, forceText = false) {
   const ref = `${columnName(columnNumber)}${rowNumber}`;
   const text = String(value ?? '');
-  const isNumeric = text !== '' && Number.isFinite(Number(text)) && !/^0\d+/.test(text);
+  const isNumeric = !forceText && text !== '' && Number.isFinite(Number(text)) && !/^0\d+/.test(text);
   if (isNumeric) return `<c r="${ref}"><v>${text}</v></c>`;
   return `<c r="${ref}" t="inlineStr"><is><t>${escapeXml(text)}</t></is></c>`;
 }

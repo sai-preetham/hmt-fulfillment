@@ -1,0 +1,2 @@
+'use client'; import { useState } from 'react';
+export function SyncCarts(){const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');async function sync(){setBusy(true);const r=await fetch('/api/crm/abandoned-carts/sync',{method:'POST'});const j=await r.json();setMessage(j.ok?`${j.synced} carts synced · ${j.recovered || 0} recovered.`:j.error);setBusy(false);if(j.ok) location.reload();}return <div><button onClick={sync} disabled={busy}>{busy?'Syncing…':'Sync Wix carts'}</button>{message?<small className="muted"> {message}</small>:null}</div>}

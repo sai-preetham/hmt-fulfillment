@@ -95,8 +95,9 @@ export function extractFedexTrackingEvents(pkg) {
 }
 
 async function getFedexToken(config) {
-  if (!config.fedex.clientId || !config.fedex.clientSecret) {
-    throw new Error('FedEx tracking requires FEDEX_CLIENT_ID and FEDEX_CLIENT_SECRET.');
+  const clientSecret = config.fedex.trackingSecret || config.fedex.clientSecret;
+  if (!config.fedex.clientId || !clientSecret) {
+    throw new Error('FedEx tracking requires FEDEX_CLIENT_ID and FEDEC_TRACKING_SECRET (or FEDEX_CLIENT_SECRET).');
   }
 
   const now = Date.now();
@@ -109,7 +110,7 @@ async function getFedexToken(config) {
   const params = new URLSearchParams();
   params.append('grant_type', 'client_credentials');
   params.append('client_id', config.fedex.clientId);
-  params.append('client_secret', config.fedex.clientSecret);
+  params.append('client_secret', clientSecret);
 
   const response = await fetch(url.toString(), {
     method: 'POST',

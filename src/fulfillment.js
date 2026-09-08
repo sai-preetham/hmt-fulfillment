@@ -105,7 +105,9 @@ export function normalizeShipmentRecord(record) {
     weight_grams: numberAmount(payloadShipment.weight || record.requestPayload?.shipment?.weightGrams || weightToGrams(fedexPackageLineItem.weight)),
     cod_amount: numberAmount(payloadShipment.cod_amount) || 0,
     request_payload: record.requestPayload || {},
-    carrier_response: record.delhiveryResponse || null,
+    carrier_response: record.replacementPart
+      ? { ...(record.delhiveryResponse || {}), replacement_part: record.replacementPart }
+      : record.delhiveryResponse || null,
     label_url: record.labelUrl || record.delhiveryResponse?.label_url || null,
     label_format: record.labelFormat || record.delhiveryResponse?.label_format || null,
     error: record.error || null,
@@ -227,6 +229,7 @@ export function normalizeAmazonOrder(amazonPayload, config = {}) {
       }
     },
     shippingAddress: {
+      address_type: 'shipping',
       name: address?.Name || customerName,
       phone: address?.Phone || null,
       address_line1: address?.AddressLine1 || '',
@@ -238,6 +241,7 @@ export function normalizeAmazonOrder(amazonPayload, config = {}) {
       raw_address: { address }
     },
     billingAddress: {
+      address_type: 'billing',
       name: address?.Name || customerName,
       phone: address?.Phone || null,
       address_line1: address?.AddressLine1 || '',

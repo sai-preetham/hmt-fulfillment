@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, DownloadCloud, UploadCloud } from 'lucide-react';
+import { CheckCircle2, DownloadCloud } from 'lucide-react';
 
 export function WixOrderActions({ order }) {
   const router = useRouter();
@@ -40,19 +40,6 @@ export function WixOrderActions({ order }) {
       >
         <DownloadCloud size={16} aria-hidden="true" />
         Pull from Wix
-      </button>
-      <button
-        type="button"
-        className="secondary"
-        disabled={Boolean(state.action)}
-        onClick={() => runAction('tracking', {
-          url: `/api/crm/orders/${order.id}/wix/push`,
-          body: { mode: 'tracking' },
-          success: 'Tracking pushed to Wix.'
-        })}
-      >
-        <UploadCloud size={16} aria-hidden="true" />
-        Push tracking
       </button>
       <button
         type="button"

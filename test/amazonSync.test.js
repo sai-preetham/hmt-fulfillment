@@ -59,8 +59,10 @@ test('runs Amazon sync in mock/demo mode when credentials are missing', async ()
 
     const customerPost = requests.find(r => r.url.includes('/rest/v1/customers') && r.method === 'POST');
     const orderPost = requests.find(r => r.url.includes('/rest/v1/orders') && r.method === 'POST');
+    const addressPosts = requests.filter(r => r.url.includes('/rest/v1/customer_addresses') && r.method === 'POST');
     assert.equal(customerPost.body.email, 'sneha@example.com');
     assert.ok(orderPost.body.external_order_id.startsWith('AMZ-406-'));
+    assert.deepEqual(addressPosts.map(request => request.body.address_type), ['shipping', 'billing']);
   } finally {
     globalThis.fetch = originalFetch;
     delete process.env.SUPABASE_URL;

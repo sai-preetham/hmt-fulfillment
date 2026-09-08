@@ -60,6 +60,36 @@ export function getConfig() {
       returnState: process.env.DELHIVERY_RETURN_STATE || '',
       returnPincode: process.env.DELHIVERY_RETURN_PINCODE || process.env.DELHIVERY_PICKUP_PINCODE || '',
       returnPhone: process.env.DELHIVERY_RETURN_PHONE || '',
+      international: {
+        clientName: process.env.DELHIVERY_INTERNATIONAL_CLIENT_NAME || process.env.DELHIVERY_CLIENT_NAME || '',
+        pickupFacilityName: process.env.DELHIVERY_INTERNATIONAL_PICKUP_FACILITY_NAME || process.env.DELHIVERY_PICKUP_LOCATION || '',
+        pickupWarehouseId: process.env.DELHIVERY_INTERNATIONAL_PICKUP_WAREHOUSE_ID || '',
+        sellerId: process.env.DELHIVERY_INTERNATIONAL_SELLER_ID || '',
+        lengthCm: process.env.DELHIVERY_INTERNATIONAL_LENGTH_CM || '',
+        widthCm: process.env.DELHIVERY_INTERNATIONAL_WIDTH_CM || '',
+        heightCm: process.env.DELHIVERY_INTERNATIONAL_HEIGHT_CM || '',
+        hsnCode: process.env.DELHIVERY_INTERNATIONAL_HSN_CODE || '',
+        igstPaymentStatus: process.env.DELHIVERY_INTERNATIONAL_IGST_PAYMENT_STATUS || 'Paid',
+        igstRate: process.env.DELHIVERY_INTERNATIONAL_IGST_RATE || '',
+        igstAmount: process.env.DELHIVERY_INTERNATIONAL_IGST_AMOUNT || '',
+        lutBondNumber: process.env.DELHIVERY_INTERNATIONAL_LUT_BOND_NUMBER || '',
+        ewbn: process.env.DELHIVERY_INTERNATIONAL_EWBN || '',
+        shipper: {
+          name: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_NAME || process.env.DELHIVERY_RETURN_NAME || '',
+          email: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_EMAIL || '',
+          phone: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_PHONE || process.env.DELHIVERY_RETURN_PHONE || '',
+          address: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_ADDRESS || process.env.DELHIVERY_RETURN_ADDRESS || '',
+          city: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_CITY || process.env.DELHIVERY_RETURN_CITY || '',
+          state: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_STATE || process.env.DELHIVERY_RETURN_STATE || '',
+          pincode: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_PINCODE || process.env.DELHIVERY_RETURN_PINCODE || '',
+          iec: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_IEC || '',
+          gstin: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_GSTIN || '',
+          pan: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_PAN || '',
+          bankAdCode: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_BANK_AD_CODE || '',
+          bankIfsc: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_BANK_IFSC || '',
+          bankAccountNumber: process.env.DELHIVERY_INTERNATIONAL_SHIPPER_BANK_ACCOUNT_NUMBER || ''
+        }
+      },
       labelUrl:
         process.env.DELHIVERY_LABEL_URL ||
         (delhiveryEnv === 'production'
@@ -77,7 +107,16 @@ export function getConfig() {
       createOrderUrl:
         delhiveryEnv === 'production'
           ? 'https://track.delhivery.com/api/cmu/create.json'
-          : 'https://staging-express.delhivery.com/api/cmu/create.json'
+          : 'https://staging-express.delhivery.com/api/cmu/create.json',
+      cancelOrderUrl:
+        delhiveryEnv === 'production'
+          ? 'https://track.delhivery.com/api/p/edit'
+          : 'https://staging-express.delhivery.com/api/p/edit',
+      pickupRequestUrl:
+        process.env.DELHIVERY_PICKUP_REQUEST_URL ||
+        (delhiveryEnv === 'production'
+          ? 'https://track.delhivery.com/fm/request/new/'
+          : 'https://staging-express.delhivery.com/fm/request/new/')
     },
     shiprocket: {
       baseUrl: process.env.SHIPROCKET_BASE_URL || 'https://apiv2.shiprocket.in/v1/external',
@@ -92,6 +131,7 @@ export function getConfig() {
       baseUrl: process.env.FEDEX_BASE_URL || 'https://apis.fedex.com',
       clientId: process.env.FEDEX_CLIENT_ID || '',
       clientSecret: process.env.FEDEX_CLIENT_SECRET || '',
+      trackingSecret: process.env.FEDEC_TRACKING_SECRET || '',
       accountNumber: process.env.FEDEX_ACCOUNT_NUMBER || '',
       trackingUrlTemplate: process.env.FEDEX_TRACKING_URL_TEMPLATE || 'https://www.fedex.com/fedextrack/?trknbr={waybill}',
       trackingEnabled: process.env.FEDEX_TRACKING_ENABLED === 'true',

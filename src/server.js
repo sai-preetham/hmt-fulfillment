@@ -8,6 +8,7 @@ import { calculateDelhiveryCharge, calculateInternationalCharge } from './delhiv
 import { createDelhiveryTrackingSync } from './delhiveryTracking.js';
 import { sendJson, sendStatic, sendText, readJsonRequest } from './http.js';
 import { buildInternationalShipmentWorkbook, internationalExportFilename } from './internationalExport.js';
+import { buildDelhiveryInternationalCurrentCsv, delhiveryInternationalCurrentCsvFilename } from './delhiveryInternationalCurrentCsv.js';
 import { createShipmentLabel } from './labels.js';
 import {
   findLatestShipmentForOrder,
@@ -99,6 +100,16 @@ async function route(req, res) {
       ? [await findOrderById(orderId)].filter(Boolean)
       : await listInternationalExportOrders({ limit: url.searchParams.get('limit') || 500 });
     if (!orders.length) return sendJson(res, 404, { error: 'No international orders available for export.' });
+    if (url.searchParams.get('format') === 'csv') {
+      const options = { service: url.searchParams.get('service') || 'saver', country: url.searchParams.get('country') };
+      const result = buildDelhiveryInternationalCurrentCsv(orders, config, options);
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${delhiveryInternationalCurrentCsvFilename(orders, options)}"`,
+        'X-Delhivery-Validation-Errors': String(result.issues.filter(issue => issue.level === 'error').length)
+      });
+      return res.end(result.csv);
+    }
     const workbook = buildInternationalShipmentWorkbook(orders, config);
     return sendWorkbook(res, internationalExportFilename(orders), workbook);
   }
