@@ -6,11 +6,13 @@ export function ManualShipmentForm() {
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
   const [shipmentType, setShipmentType] = useState('original');
   async function submit(event) {
-    event.preventDefault(); setBusy(true); setMessage('');
-    const response = await fetch('/api/crm/shipments/manual', { method: 'POST', body: new FormData(event.currentTarget) });
+    event.preventDefault();
+    const form = event.currentTarget;
+    setBusy(true); setMessage('');
+    const response = await fetch('/api/crm/shipments/manual', { method: 'POST', body: new FormData(form) });
     const result = await response.json().catch(() => ({})); setBusy(false);
     if (!response.ok) { setMessage(result.error || result.validation?.join(', ') || 'Could not save shipment.'); return; }
-    event.currentTarget.reset(); setMessage(result.demo ? 'Manual shipment validated in demo mode.' : 'Manual shipment saved.');
+    form.reset(); setMessage(result.demo ? 'Manual shipment validated in demo mode.' : 'Manual shipment saved.');
   }
   return <form className="formGrid" onSubmit={submit}>
     <Field name="awb_number" label="AWB / tracking number" required /><Field name="order_number" label="Order number" required /><Field name="customer_name" label="Recipient name" required /><Field name="phone" label="Recipient phone" required />

@@ -4,6 +4,7 @@ import { isAuthRequired, isAutomationAuthBypassAllowed, isLocalAuthBypassAllowed
 import { hasPermission, permissionForPath } from './lib/access-control.js';
 
 export async function proxy(request) {
+  if (request.nextUrl.pathname === '/api/health') return NextResponse.next();
   const authRequired = isAuthRequired();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;

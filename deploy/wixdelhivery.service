@@ -10,6 +10,7 @@ Group=saipi
 WorkingDirectory=/home/saipi/wixdelhivery
 Environment=NODE_ENV=production
 Environment=AUTH_REQUIRED=true
+EnvironmentFile=-/home/saipi/wixdelhivery/.release.env
 ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=5

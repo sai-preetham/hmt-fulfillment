@@ -1,3 +1,7 @@
+# Development and releases
+
+Use a feature branch and pull request to `main`. Validated commits on `main` deploy automatically to `saipi`. See [the deployment guide](docs/DEPLOYMENT.md) for checks and rollback.
+
 # Hold My Throttle Operations CRM
 
 This repository now contains a Next.js internal Operations CRM for Hold My Throttle plus the legacy Wix/Delhivery shipment service.

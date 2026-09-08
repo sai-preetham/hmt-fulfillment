@@ -1,0 +1,14 @@
+[Unit]
+Description=Deploy validated main commits for HMT fulfillment
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=saipi
+Group=saipi
+ExecStart=/usr/bin/bash /usr/local/lib/hmt-deploy/deploy-main.sh
+TimeoutStartSec=20min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
