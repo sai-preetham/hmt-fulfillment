@@ -81,27 +81,5 @@ export async function POST(request, { params }) {
     updated_at: new Date().toISOString()
   }).eq('id', shipment.order_id);
 
-  if (isPickedUpOrLater(normalized)) {
-    try {
-      const [{ getConfig }, { markShipmentPickedUpInWix }] = await Promise.all([
-        import('@/src/config.js'),
-        import('@/src/wixShipmentSync.js')
-      ]);
-      await markShipmentPickedUpInWix({ ...shipment, waybill: awb, courier_code: courier, status: normalized }, getConfig());
-    } catch (error) {
-      await supabase.from('integration_errors').insert({
-        integration: 'wix',
-        operation: 'fulfill-after-pickup',
-        status: 'open',
-        message: error.message,
-        payload: { courier, awb, normalized }
-      });
-    }
-  }
-
   return NextResponse.json({ accepted: true, matched: true });
-}
-
-function isPickedUpOrLater(status) {
-  return ['picked-up', 'dispatched', 'in-transit', 'out-for-delivery', 'delivered'].includes(String(status || '').replace(/_/g, '-'));
 }

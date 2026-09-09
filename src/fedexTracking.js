@@ -47,7 +47,7 @@ export function normalizeFedexStatus(fedexStatus) {
 
   if (s === 'dl' || s.includes('delivered')) return 'delivered';
   if (s === 'od' || s.includes('out for delivery') || s.includes('ofd')) return 'out-for-delivery';
-  if (s === 'pu' || s.includes('picked up') || s.includes('pickup') || s.includes('pickedup')) return 'picked-up';
+  if (s === 'pu' || s.includes('picked up') || s.includes('pickedup')) return 'picked-up';
   if (s === 'it' || s.includes('in transit') || s.includes('transit') || s.includes('on way') || s.includes('departed') || s.includes('arrived') || s.includes('shipment') || s.includes('holding') || s.includes('clearance')) return 'in-transit';
   if (s === 'oc' || s.includes('initiated') || s.includes('manifested') || s.includes('label created') || s.includes('booked')) return 'booked';
   if (s.includes('return') || s.includes('rto')) return 'rto';

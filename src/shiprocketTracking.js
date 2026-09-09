@@ -51,7 +51,8 @@ export function normalizeShiprocketStatus(rawStatus) {
   if (status.includes('delivered')) return 'delivered';
   if (status.includes('out for delivery') || status.includes('ofd')) return 'out-for-delivery';
   if (status.includes('in transit') || status.includes('shipped') || status.includes('reached')) return 'in-transit';
-  if (status.includes('picked up') || status.includes('pickup generated') || status.includes('pickup scheduled')) return 'picked-up';
+  if (status.includes('picked up')) return 'picked-up';
+  if (status.includes('pickup generated') || status.includes('pickup scheduled')) return 'booked';
   if (status.includes('awb assigned') || status.includes('shipment booked') || status.includes('booked')) return 'booked';
   if (
     status.includes('cancel') ||

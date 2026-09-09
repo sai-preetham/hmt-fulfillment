@@ -92,9 +92,7 @@ export function PickupWorkspace({ workspace }) {
             Last carrier update: {updatedAt ? new Date(updatedAt).toLocaleString('en-IN') : 'Not available yet'}.
             Delhivery + FedEx (and any other AWB) appear here when booked but not yet collected.
           </p>
-          <p className="muted">
-            Note: a Wix Fulfilled badge only means the storefront was marked fulfilled — it does not mean the courier picked up the package.
-          </p>
+          <p className="muted">Live carrier progress updates this queue automatically. Historical Wix-fulfilled shipments are also treated as completed.</p>
         </div>
         <div className="toolbar">
           <button type="button" className="secondary" onClick={refresh} disabled={refreshing}>
