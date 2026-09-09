@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { FulfillShipmentButton } from './fulfill-shipment-button';
 import { StatusPill } from './status-pill';
 
 /** Default Delhivery pickup slot: 16:00 Asia/Kolkata. After 16:00 IST, use tomorrow 16:00. */
@@ -44,13 +45,13 @@ function carrierLabel(carrier = '') {
 function wixBadge(shipment) {
   const fulfillment = String(shipment.fulfillment_status || '').toUpperCase();
   const wixStatus = String(shipment.wix_fulfillment_status || '').toLowerCase();
+  if (wixStatus === 'failed') return { label: 'Wix sync failed', tone: 'danger' };
   if (fulfillment === 'FULFILLED' || wixStatus === 'fulfilled' || wixStatus === 'synced') {
     return { label: 'Wix fulfilled', tone: 'ok' };
   }
   if (wixStatus.includes('awaiting') || wixStatus.includes('pending')) {
     return { label: 'Wix awaiting pickup', tone: 'warn' };
   }
-  if (wixStatus === 'failed') return { label: 'Wix sync failed', tone: 'danger' };
   return { label: 'Wix not fulfilled', tone: 'muted' };
 }
 
@@ -91,9 +92,7 @@ export function PickupWorkspace({ workspace }) {
             Last carrier update: {updatedAt ? new Date(updatedAt).toLocaleString('en-IN') : 'Not available yet'}.
             Delhivery + FedEx (and any other AWB) appear here when booked but not yet collected.
           </p>
-          <p className="muted">
-            Note: a Wix Fulfilled badge only means the storefront was marked fulfilled — it does not mean the courier picked up the package.
-          </p>
+          <p className="muted">Live carrier progress updates this queue automatically. Historical Wix-fulfilled shipments are also treated as completed.</p>
         </div>
         <div className="toolbar">
           <button type="button" className="secondary" onClick={refresh} disabled={refreshing}>
@@ -119,7 +118,7 @@ export function PickupWorkspace({ workspace }) {
             <p className="eyebrow">Action required</p>
             <h2>Needs pickup</h2>
             <p className="muted">
-              Grouped by warehouse and carrier. Delhivery groups can raise pickup at 16:00 IST. FedEx shows tracking and a manual mark-picked-up / sync Wix action.
+              Booked shipments grouped by warehouse and carrier. Mark picked up after collection to send tracking and fulfill the order on Wix.
             </p>
           </div>
         </div>
@@ -226,7 +225,7 @@ function PickupLocationGroup({ group }) {
           </thead>
           <tbody>
             {group.shipments.map(shipment => (
-              <PickupShipmentRow key={shipment.id} shipment={shipment} showMarkPickup={!isDelhivery} onDone={() => router.refresh()} />
+              <PickupShipmentRow key={shipment.id} shipment={shipment} showMarkPickup onDone={() => router.refresh()} />
             ))}
           </tbody>
         </table>
@@ -254,7 +253,7 @@ function PickupShipmentRow({ shipment, showMarkPickup = false, onDone }) {
       });
       const result = await response.json().catch(() => ({}));
       setMessage(result.message || result.error || 'Mark picked up finished.');
-      if (result.ok) onDone?.();
+      if (result.ok || result.shipment) onDone?.();
     } catch {
       setMessage('Could not mark picked up.');
     } finally {
@@ -297,8 +296,8 @@ function PickupShipmentRow({ shipment, showMarkPickup = false, onDone }) {
             </a>
           ) : null}
           {showMarkPickup ? (
-            <button type="button" className="secondary" onClick={markPickedUp} disabled={busy}>
-              {busy ? 'Syncing…' : 'Mark picked up / sync Wix'}
+            <button type="button" className="secondary" onClick={markPickedUp} disabled={busy} title="Record courier pickup and fulfill this order on Wix with tracking.">
+              {busy ? 'Syncing…' : 'Mark picked up'}
             </button>
           ) : null}
         </div>
@@ -363,6 +362,7 @@ function ShipmentStatusSection({ title, description, shipments = [], empty, dang
                     <td>
                       <div className="toolbar" style={{ gap: '0.35rem' }}>
                         <Link href={`/orders/${shipment.order_id}`}>Order</Link>
+                        {shipment.orders?.wix_order_id && badge.tone !== 'ok' && !danger ? <FulfillShipmentButton orderId={shipment.order_id} shipment={shipment} /> : null}
                         {shipment.tracking_url ? (
                           <a href={shipment.tracking_url} target="_blank" rel="noreferrer">
                             Track

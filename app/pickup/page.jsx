@@ -25,7 +25,7 @@ export default async function PickupPage({ searchParams }) {
           <h1>Awaiting warehouse pickup</h1>
           <p className="muted">
             All carriers with an AWB that the courier has not collected yet ({awaitingCount} waiting).
-            Wix Fulfilled is not the same as courier pickup — new bookings stay unfulfilled on Wix until pickup.
+            After collection, select Mark picked up to record pickup and fulfill the order on Wix.
           </p>
         </div>
       </header>

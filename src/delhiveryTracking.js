@@ -4,8 +4,8 @@
  * Periodically fetches live shipment status from the Delhivery tracking API
  * for all active booked shipments, saves events to `shipment_events`, and
  * updates `shipments.status` + `orders.shipment_status`.
- * Once a carrier reports pickup (or a later state), Wix is updated with the
- * tracking info and fulfillment in the same operation.
+ * Carrier progress updates the local pickup state. Wix fulfillment remains an
+ * explicit operator action after pickup.
  */
 
 import { isSupabaseConfigured } from './supabase.js';
@@ -14,7 +14,7 @@ import {
   saveTrackingEvents,
   updateShipmentTracking
 } from './store.js';
-import { isPickedUpOrLater, markShipmentPickedUpInWix, rollbackCancelledShipmentInWix } from './wixShipmentSync.js';
+import { rollbackCancelledShipmentInWix } from './wixShipmentSync.js';
 import {
   extractShiprocketTrackingEvents,
   fetchShiprocketTracking,
@@ -333,17 +333,6 @@ async function pollCourierTracking(courierCode, activeShipments, batchSize, conf
             state.lastWarnings.push(warning);
             logger.error?.(warning);
           }
-        }
-      }
-
-      if (liveStatus && isPickedUpOrLater(liveStatus)) {
-        try {
-          const result = await markShipmentPickedUpInWix({ ...shipment, status: liveStatus }, config);
-          if (result) logger.log?.(`[tracking] ${courierCode} AWB ${shipment.waybill}: Wix fulfillment synced after pickup`);
-        } catch (error) {
-          const warning = `[tracking] ${courierCode} AWB ${shipment.waybill}: Wix fulfillment sync failed: ${error.message}`;
-          state.lastWarnings.push(warning);
-          logger.error?.(warning);
         }
       }
 

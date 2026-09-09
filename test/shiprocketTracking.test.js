@@ -12,6 +12,8 @@ test('normalizes Shiprocket statuses to internal shipment states', () => {
   assert.equal(normalizeShiprocketStatus('Out For Delivery'), 'out-for-delivery');
   assert.equal(normalizeShiprocketStatus('RTO Initiated'), 'rto');
   assert.equal(normalizeShiprocketStatus('Shipment Booked'), 'booked');
+  assert.equal(normalizeShiprocketStatus('Pickup Scheduled'), 'booked');
+  assert.equal(normalizeShiprocketStatus('Picked Up'), 'picked-up');
   assert.equal(normalizeShiprocketStatus('Custom Cleared Overseas'), 'in-transit');
   assert.equal(normalizeShiprocketStatus('Canceled'), 'failed');
   assert.equal(normalizeShiprocketStatus(7), 'delivered');

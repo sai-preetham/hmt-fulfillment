@@ -303,17 +303,24 @@ export async function updateShipmentStatus(shipmentId, status) {
 export async function listActiveShipmentWaybills() {
   const supabase = getSupabaseClient();
   if (!supabase) return [];
-  // Fetch booked/in-transit shipments that have a real AWB
-  const rows = await supabase.select(
-    'shipments',
-    'select=id,waybill,order_id,status,courier_code' +
-      '&waybill=not.is.null' +
-      '&status=not.in.(delivered,rto,cancelled,failed)' +
-      '&order=updated_at.asc' +
-      '&limit=500'
-  );
+  // Fetch every booked/in-transit shipment. A fixed limit leaves older booked
+  // rows stale forever once the active queue grows past that limit.
+  const rows = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await supabase.select(
+      'shipments',
+      'select=id,waybill,order_id,status,courier_code' +
+        '&waybill=not.is.null' +
+        '&status=not.in.(delivered,rto,cancelled,failed)' +
+        '&order=updated_at.asc,id.asc' +
+        `&limit=${pageSize}&offset=${offset}`
+    );
+    rows.push(...(page || []));
+    if (!page || page.length < pageSize) break;
+  }
   // Filter out empty-string waybills (Supabase `not.is.null` won't catch those)
-  return (rows || []).filter(r => r.waybill && r.waybill.trim());
+  return rows.filter(r => r.waybill && r.waybill.trim());
 }
 
 /**
