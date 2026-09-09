@@ -139,3 +139,11 @@ These options must be visible on the order detail page, saved without changing s
 5. Order is cancelled after shipment booked: order status becomes cancelled and cancellation audit is retained.
 6. Shipment is delivered but customer has not installed: installation status remains pending and follow-up tasks stay open.
 7. Customer reports issue after installation: feedback escalates issue and creates support task/warranty case.
+
+## Booked shipments awaiting pickup
+
+1. Book an outbound shipment (Delhivery, FedEx, or manual carrier) with an AWB. It appears in **Awaiting Pickup**, with a **Mark picked up** button. Booking itself must not fulfill Wix.
+2. After courier collection, select **Mark picked up**. The shipment moves to **Already picked up** and a linked Wix order receives fulfillment and tracking.
+3. If Wix fulfillment fails or is disabled, pickup remains recorded. Under **Already picked up**, use **Mark fulfilled on Wix** after fixing the problem. A retry must not move an in-transit or delivered shipment back to picked up.
+4. Orders without a Wix link can be marked picked up without sending anything to Wix.
+5. Reverse shipments, incomplete bookings, cancelled shipments, and shipments without an AWB must not appear in the awaiting queue. Carrier tracking updates must never create Wix fulfillments automatically.

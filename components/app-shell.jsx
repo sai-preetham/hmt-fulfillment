@@ -30,7 +30,7 @@ const nav = [
   ['/orders', 'Orders', ClipboardList],
   ['/packing', 'Packing Queue', Boxes],
   ['/shipments', 'Shipment Booking', Truck],
-  ['/pickup', 'Pickup Pending', PackageCheck],
+  ['/pickup', 'Awaiting Pickup', PackageCheck],
   ['/installation', 'Installation', Wrench],
   ['/feedback', 'Feedback', MessageCircle],
   ['/tasks', 'Tasks', CheckSquare],

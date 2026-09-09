@@ -57,7 +57,7 @@ Pages:
 - `/orders/[id]`: editable order, timeline, packing, shipment, Chatwoot actions
 - `/packing`: packing queue
 - `/shipments`: shipment booking queue
-- `/pickup`: pickup pending queue
+- `/pickup`: booked outbound shipments awaiting pickup; Mark picked up records collection and sends Wix fulfillment. If Wix fails, retry fulfillment under Already picked up.
 - `/installation`: installation follow-up
 - `/feedback`: feedback/review queue
 - `/tasks`: operator task board
