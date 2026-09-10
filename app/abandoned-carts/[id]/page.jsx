@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 import { AbandonedCartLeadForm } from '@/components/abandoned-cart-lead-form';
 import { getAbandonedCartLead } from '@/lib/crm/abandoned-carts';
+import { abandonedCartWhatsAppUrl } from '@/lib/crm/abandoned-cart-whatsapp';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,10 +11,15 @@ export default async function AbandonedCartLeadPage({ params }) {
   const { id } = await params;
   const lead = await getAbandonedCartLead(id);
   if (!lead) notFound();
+  const whatsappUrl = abandonedCartWhatsAppUrl(lead);
   return <AppShell>
     <header className="pageHeader">
       <div><p className="eyebrow">Abandoned-cart lead</p><h1>{lead.customer_name || 'Unknown shopper'}</h1><p className="muted">Abandoned {formatDate(lead.wix_created_at)} · {lead.currency || 'INR'} {lead.cart_value || 0}</p></div>
-      <div className="toolbar"><Link className="button secondary" href="/abandoned-carts">Back to queue</Link>{lead.checkout_url ? <a className="button" href={lead.checkout_url} target="_blank">Open checkout</a> : null}</div>
+      <div className="toolbar">
+        <Link className="button secondary" href="/abandoned-carts">Back to queue</Link>
+        {lead.checkout_url ? <a className="button secondary" href={lead.checkout_url} target="_blank" rel="noreferrer">Open checkout</a> : null}
+        {whatsappUrl ? <a className="button" href={whatsappUrl} target="_blank" rel="noreferrer">Message on WhatsApp</a> : <span className="muted">Add a valid phone number to message on WhatsApp.</span>}
+      </div>
     </header>
     <section className="grid orderOpsGrid">
       <article className="panel opsMain"><div className="panelHeader"><h2>Customer & cart</h2></div><div className="panelBody detailList">
