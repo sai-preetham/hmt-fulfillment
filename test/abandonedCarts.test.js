@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { findRecoveryMatch, normalizePhone } from '../lib/crm/abandoned-cart-matching.js';
+import { abandonedCartWhatsAppMessage, abandonedCartWhatsAppUrl, whatsappPhone } from '../lib/crm/abandoned-cart-whatsapp.js';
 
 const created = '2026-08-01T10:00:00.000Z';
 const later = '2026-08-03T10:00:00.000Z';
@@ -25,4 +26,24 @@ test('does not match orders placed before the abandoned checkout', () => {
   const lead = { wix_created_at: created, email: 'customer@example.com', raw_data: {} };
   const order = { id: 'old-order', source_created_at: '2026-07-31T10:00:00.000Z', customers: { email: 'customer@example.com' } };
   assert.equal(findRecoveryMatch(lead, [order]), null);
+});
+
+test('builds a personalized WhatsApp recovery link', () => {
+  const lead = {
+    customer_name: 'Vivier Philippe',
+    phone: '+33 6 12 34 56 78',
+    items: [{ productName: { translated: 'cruise control for your V-Strom 800' } }]
+  };
+  const message = abandonedCartWhatsAppMessage(lead);
+  assert.match(message, /^Hello Vivier Philippe,/);
+  assert.match(message, /purchase cruise control for your V-Strom 800/);
+  assert.match(message, /https:\/\/youtu\.be\/LO9kg1WaPO0/);
+  assert.equal(abandonedCartWhatsAppUrl(lead), `https://wa.me/33612345678?text=${encodeURIComponent(message)}`);
+});
+
+test('normalizes Indian local numbers and rejects unusable phone values', () => {
+  assert.equal(whatsappPhone('98765 43210'), '919876543210');
+  assert.equal(whatsappPhone('0091-98765-43210'), '919876543210');
+  assert.equal(whatsappPhone('1234'), '');
+  assert.equal(abandonedCartWhatsAppUrl({ phone: 'not available' }), '');
 });
