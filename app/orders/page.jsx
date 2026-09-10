@@ -18,7 +18,7 @@ export default async function OrdersPage({ searchParams }) {
           <p className="eyebrow">Orders</p>
           <h1>Order workbench</h1>
           <p className="muted">Search by customer, phone, order ID, AWB, bike model, or source.</p>
-          <Link className="subtle" href="/gst-invoices">View monthly GST invoice export</Link>
+          <Link className="subtle" href="/gst-invoices">Open sales and GST reports</Link>
         </div>
       </header>
 

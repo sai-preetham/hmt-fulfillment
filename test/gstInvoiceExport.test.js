@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildGstInvoiceRow, gstInvoiceCsv, monthBounds, shouldIncludeGstInvoice } from '../lib/crm/gst-invoice-export.js';
+import { buildGstInvoiceRow, dateRangeBounds, gstInvoiceCsv, monthBounds, shouldIncludeGstInvoice, summarizeGstInvoices } from '../lib/crm/gst-invoice-export.js';
 
 test('exports valid domestic B2B GSTIN and uses the stored GST amount', () => {
   const row = buildGstInvoiceRow({
@@ -9,6 +9,7 @@ test('exports valid domestic B2B GSTIN and uses the stored GST amount', () => {
   });
   assert.equal(row.gst, '19GMSPM3198B1ZG');
   assert.equal(row.totalTax, 2362.43);
+  assert.equal(row.taxableValue, 13124.6);
   assert.equal(row.gstTreatment, 'B2B');
 });
 
@@ -50,9 +51,26 @@ test('uses B2C for invoices with no recorded destination', () => {
   assert.equal(row.gstTreatment, 'B2C');
 });
 
-test('formats a CSV compatible with the provided Wix export columns', () => {
+test('formats a CSV with the agreed sales and GST report columns', () => {
   const csv = gstInvoiceCsv([buildGstInvoiceRow({ order_number: '10407', total_amount: 1180, shipping_address: { country: 'IND' } })]);
-  assert.match(csv, /^Invoice number,Date created,GST,Delivery country,Billing country,Total tax,Total,Currency,GST treatment\r\n/);
+  assert.match(csv, /^Order #,Order date,Customer,Delivery country,GSTIN,GST type,GST treatment,Value without tax,GST,Total with tax,Currency,Payment status\r\n/);
   assert.match(csv, /B2C/);
   assert.deepEqual(monthBounds('2026-06'), { start: '2026-05-31T18:30:00.000Z', end: '2026-06-30T18:30:00.000Z' });
+});
+
+test('uses inclusive India-time date ranges and rejects invalid ranges', () => {
+  assert.deepEqual(dateRangeBounds('2026-08-01', '2026-08-31'), { start: '2026-07-31T18:30:00.000Z', end: '2026-08-31T18:30:00.000Z' });
+  assert.throws(() => dateRangeBounds('2026-09-01', '2026-08-31'), /on or before/);
+  assert.throws(() => dateRangeBounds('2025-01-01', '2026-12-31'), /366 days/);
+});
+
+test('summarizes taxable value, GST, totals, treatments, and reconciliation', () => {
+  const report = summarizeGstInvoices([
+    { taxableValue: 1000, totalTax: 180, total: 1180, gstTreatment: 'B2C' },
+    { taxableValue: 500, totalTax: 0, total: 500, gstTreatment: 'LUT' }
+  ]);
+  assert.deepEqual(report, {
+    orders: 2, taxableValue: 1500, totalTax: 180, total: 1680, difference: 0,
+    treatments: { B2C: { orders: 1, total: 1180 }, LUT: { orders: 1, total: 500 } }
+  });
 });
