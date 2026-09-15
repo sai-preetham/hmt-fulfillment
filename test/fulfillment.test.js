@@ -134,6 +134,9 @@ test('persists tracking details pulled from Wix fulfillments', async () => {
   const requests = [];
   global.fetch = async (url, options = {}) => {
     requests.push({ url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
+    if (String(url).includes('/rest/v1/shipments?order_id')) {
+      return jsonResponse([]);
+    }
     if (String(url).includes('/rest/v1/shipments?legacy_order_id')) {
       return jsonResponse([]);
     }
@@ -204,6 +207,9 @@ test('does not downgrade delivered shipments when Wix fulfillment only has track
   const requests = [];
   global.fetch = async (url, options = {}) => {
     requests.push({ url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
+    if (String(url).includes('/rest/v1/shipments?order_id')) {
+      return jsonResponse([]);
+    }
     if (String(url).includes('/rest/v1/shipments?legacy_order_id')) {
       return jsonResponse([
         {
