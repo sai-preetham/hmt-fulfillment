@@ -1,0 +1,10 @@
+[Unit]
+Description=Post the daily Chatwoot Discord report
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/home/saipi/wixdelhivery/.env
+# Discord webhook delivery is not idempotent, so this request is never retried.
+ExecStart=/usr/bin/curl -fsS -X POST http://127.0.0.1:3000/api/integrations/chatwoot/daily-report -H "Authorization: Bearer ${AUTOMATION_SECRET}" -H "Content-Type: application/json"

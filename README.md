@@ -288,12 +288,13 @@ DAILY_ORDER_GOAL=5
 ORDER_REPORT_CURRENCY=INR
 ```
 
-The protected endpoint is `POST /api/integrations/orders/export`. `deploy/wixdelhivery-order-export.timer` invokes it every day at 00:00 in `Asia/Kolkata`; the cron fallback contains the equivalent schedule. Enable the systemd unit after deployment:
+The order report uses `POST /api/integrations/orders/export` at 00:00 IST. The independent Chatwoot report uses `POST /api/integrations/chatwoot/daily-report` at 00:02 IST. A failure in either service cannot retry or block the other. Enable both systemd timers after deployment:
 
 ```bash
 sudo cp deploy/wixdelhivery-order-export.{service,timer} /etc/systemd/system/
+sudo cp deploy/wixdelhivery-chatwoot-report.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now wixdelhivery-order-export.timer
+sudo systemctl enable --now wixdelhivery-order-export.timer wixdelhivery-chatwoot-report.timer
 ```
 
 For the Discord bot command, create an application command named `orders24` in the Discord Developer Portal and set its interactions endpoint to `https://your-domain/api/integrations/discord/interactions`. Set `DISCORD_APPLICATION_PUBLIC_KEY` from the same application. Discord signs every interaction; the endpoint rejects unsigned requests.

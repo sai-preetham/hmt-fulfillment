@@ -20,7 +20,12 @@ test('a newer failed or running CI attempt blocks an earlier success', () => {
 });
 
 test('daily Discord reports are not retried because webhook posts are not idempotent', () => {
-  const service = readFileSync(new URL('../deploy/wixdelhivery-order-export.service', import.meta.url), 'utf8');
-  assert.doesNotMatch(service, /--retry(?:\s|=)/);
-  assert.match(service, /\/api\/integrations\/orders\/export/);
+  const orderService = readFileSync(new URL('../deploy/wixdelhivery-order-export.service', import.meta.url), 'utf8');
+  const chatwootService = readFileSync(new URL('../deploy/wixdelhivery-chatwoot-report.service', import.meta.url), 'utf8');
+  assert.doesNotMatch(orderService, /--retry(?:\s|=)/);
+  assert.doesNotMatch(chatwootService, /--retry(?:\s|=)/);
+  assert.match(orderService, /\/api\/integrations\/orders\/export/);
+  assert.doesNotMatch(orderService, /chatwoot\/daily-report/);
+  assert.match(chatwootService, /\/api\/integrations\/chatwoot\/daily-report/);
+  assert.doesNotMatch(chatwootService, /orders\/export/);
 });

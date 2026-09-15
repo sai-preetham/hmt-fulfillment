@@ -1,11 +1,10 @@
 [Unit]
-Description=Export Wix orders and post daily order and Chatwoot Discord trackers
+Description=Export Wix orders and post the daily order Discord report
 Wants=network-online.target
 After=network-online.target
 
 [Service]
 Type=oneshot
 EnvironmentFile=/home/saipi/wixdelhivery/.env
-# Discord webhook delivery is not idempotent. Never retry the whole combined
-# report after an HTTP failure because already-sent messages would be duplicated.
+# Discord webhook delivery is not idempotent, so this request is never retried.
 ExecStart=/usr/bin/curl -fsS -X POST http://127.0.0.1:3000/api/integrations/orders/export -H "Authorization: Bearer ${AUTOMATION_SECRET}" -H "Content-Type: application/json" -d "{\"trigger\":\"systemd-daily\"}"
