@@ -269,9 +269,9 @@ curl -X POST http://localhost:3000/api/book-manual \
 
 ## Notes Before Production
 
-### Google Sheets sourcing export and Discord order digest
+### Daily Google Sheets, order digest, and Chatwoot tracker
 
-The daily export reads the Wix orders already synced into Supabase. It replaces two tabs in the configured spreadsheet: `All Orders` (one row per order item) and `Sourcing View` (active, non-cancelled quantity grouped by SKU). It also posts the order count for the prior completed calendar day (00:00–24:00 in `Asia/Kolkata`) to Discord.
+The daily job reads the Wix orders already synced into Supabase. It replaces two tabs in the configured spreadsheet: `All Orders` (one row per order item) and `Sourcing View` (active, non-cancelled quantity grouped by SKU). It posts the order digest and a Chatwoot tracker for the prior completed calendar day (00:00–24:00 in `Asia/Kolkata`) to Discord. The Chatwoot tracker includes conversations opened and resolved during the day, the current open/pending backlog, and open/pending counts per assignee (including unassigned conversations).
 
 Create a Google Cloud service account with the Google Sheets API enabled, share the target spreadsheet with that service account's email as an Editor, then add these server-only values to `.env`:
 
@@ -280,13 +280,15 @@ GOOGLE_SHEETS_SPREADSHEET_ID=your-spreadsheet-id
 GOOGLE_SERVICE_ACCOUNT_EMAIL=service-account@project.iam.gserviceaccount.com
 GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"
 DISCORD_ORDERS_WEBHOOK_URL=https://discord.com/api/webhooks/...
+# Optional; defaults to DISCORD_ORDERS_WEBHOOK_URL.
+DISCORD_CHATWOOT_WEBHOOK_URL=https://discord.com/api/webhooks/...
 DISCORD_APPLICATION_PUBLIC_KEY=discord-application-public-key
 OPERATIONS_TIMEZONE=Asia/Kolkata
 DAILY_ORDER_GOAL=5
 ORDER_REPORT_CURRENCY=INR
 ```
 
-The protected endpoint is `POST /api/integrations/orders/export`. `deploy/wixdelhivery-order-export.timer` invokes it every day at 00:01 (the host's local timezone); the cron fallback contains the equivalent schedule. Enable the systemd unit after deployment:
+The protected endpoint is `POST /api/integrations/orders/export`. `deploy/wixdelhivery-order-export.timer` invokes it every day at 00:00 in `Asia/Kolkata`; the cron fallback contains the equivalent schedule. Enable the systemd unit after deployment:
 
 ```bash
 sudo cp deploy/wixdelhivery-order-export.{service,timer} /etc/systemd/system/
