@@ -1,5 +1,5 @@
 [Unit]
-Description=Export Wix orders to Google Sheets and post the Discord order digest
+Description=Export Wix orders and post daily order and Chatwoot Discord trackers
 Wants=network-online.target
 After=network-online.target
 
