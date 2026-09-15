@@ -55,6 +55,7 @@ function pickupHarness({ status = 'booked', wix = true, syncFails = false } = {}
   } };
   const mocks = {
     './pickup.js': { isAwaitingWarehousePickup, canConfirmPickup },
+    './shipment-dedup': { findMatchingShipment: () => null, isDuplicateShipmentError: () => false },
     '@/lib/supabase/server': { createServiceClient: () => client },
     './order-search': {}, '@/src/shipmentValidation.js': {}, './seed': {},
     '@/src/store.js': { findOrderById: async () => order },

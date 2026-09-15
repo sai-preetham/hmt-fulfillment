@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { buildAudit, buildOrderShipmentSummary, normalizeShipmentRecord, normalizeWixOrder, normalizeAmazonOrder } from './fulfillment.js';
 import { getConfig } from './config.js';
 import { isSupabaseConfigured, SupabaseRestClient } from './supabase.js';
+import { findMatchingShipment } from '../lib/crm/shipment-dedup.js';
 
 const STORE_PATH = join(process.cwd(), 'data', 'shipments.json');
 
@@ -388,11 +389,14 @@ async function listSupabaseShipments(supabase) {
 
 async function upsertSupabaseShipment(supabase, record) {
   const normalized = normalizeShipmentRecord(record);
+  const duplicate = normalized.order_id && normalized.waybill
+    ? await findSupabaseShipmentByAwb(supabase, normalized)
+    : null;
   const existing = record.id
     ? await findSupabaseShipmentById(supabase, record.id)
-    : record.createNewShipment
+    : duplicate || (record.createNewShipment
       ? null
-      : await findLatestSupabaseShipment(supabase, record.orderId);
+      : await findLatestSupabaseShipment(supabase, record.orderId));
   const before = existing || null;
   const shipmentRow = existing ? mergeShipmentUpdate(existing, normalized) : normalized;
   const nextRecord = existing
@@ -614,6 +618,17 @@ async function findLatestSupabaseShipment(supabase, legacyOrderId) {
 async function findSupabaseShipmentById(supabase, id) {
   const rows = await supabase.select('shipments', `id=eq.${encodeURIComponent(id)}&limit=1`);
   return rows[0] || null;
+}
+
+async function findSupabaseShipmentByAwb(supabase, shipment) {
+  const rows = await supabase.select(
+    'shipments',
+    `order_id=eq.${encodeURIComponent(shipment.order_id)}&waybill=not.is.null&order=updated_at.desc&limit=100`
+  );
+  return findMatchingShipment(rows, {
+    orderId: shipment.order_id,
+    waybill: shipment.waybill
+  });
 }
 
 async function findSupabaseOrderByWixId(supabase, wixOrderId) {
