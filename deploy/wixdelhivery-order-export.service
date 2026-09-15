@@ -6,4 +6,6 @@ After=network-online.target
 [Service]
 Type=oneshot
 EnvironmentFile=/home/saipi/wixdelhivery/.env
-ExecStart=/usr/bin/curl -fsS --retry 6 --retry-connrefused --retry-delay 5 -X POST http://127.0.0.1:3000/api/integrations/orders/export -H "Authorization: Bearer ${AUTOMATION_SECRET}" -H "Content-Type: application/json" -d "{\"trigger\":\"systemd-daily\"}"
+# Discord webhook delivery is not idempotent. Never retry the whole combined
+# report after an HTTP failure because already-sent messages would be duplicated.
+ExecStart=/usr/bin/curl -fsS -X POST http://127.0.0.1:3000/api/integrations/orders/export -H "Authorization: Bearer ${AUTOMATION_SECRET}" -H "Content-Type: application/json" -d "{\"trigger\":\"systemd-daily\"}"

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { isValidatedMainCommit } from '../deploy/ci-gate.mjs';
 
 const sha = 'a'.repeat(40);
@@ -16,4 +17,10 @@ test('deployment accepts only successful push-to-main CI for the exact release',
 test('a newer failed or running CI attempt blocks an earlier success', () => {
   assert.equal(isValidatedMainCommit({ workflow_runs: [successfulRun, {...successfulRun, run_attempt:2, status:'in_progress', conclusion:null}] }, sha), false);
   assert.equal(isValidatedMainCommit({ workflow_runs: [successfulRun, {...successfulRun, run_number:11, conclusion:'failure'}] }, sha), false);
+});
+
+test('daily Discord reports are not retried because webhook posts are not idempotent', () => {
+  const service = readFileSync(new URL('../deploy/wixdelhivery-order-export.service', import.meta.url), 'utf8');
+  assert.doesNotMatch(service, /--retry(?:\s|=)/);
+  assert.match(service, /\/api\/integrations\/orders\/export/);
 });
