@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the daily Chatwoot report at 00:02 IST
+
+[Timer]
+OnCalendar=*-*-* 00:02:00 Asia/Kolkata
+Persistent=true
+Unit=wixdelhivery-chatwoot-report.service
+
+[Install]
+WantedBy=timers.target

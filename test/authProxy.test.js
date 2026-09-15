@@ -36,6 +36,7 @@ test('automation bearer bypass is limited to protected automation APIs', () => {
   const env = { AUTOMATION_SECRET: 'secret-1' };
   assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/api/automation/run', 'Bearer secret-1'), env), true);
   assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/api/tracking/sync', 'Bearer secret-1'), env), true);
+  assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/api/integrations/chatwoot/daily-report', 'Bearer secret-1'), env), true);
   assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/api/automation/run', 'Bearer wrong'), env), false);
   assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/orders', 'Bearer secret-1'), env), false);
 });

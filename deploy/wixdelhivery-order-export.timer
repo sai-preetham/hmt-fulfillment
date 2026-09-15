@@ -1,5 +1,5 @@
 [Unit]
-Description=Run daily Wix and Chatwoot reports at midnight IST
+Description=Run the daily Wix order report at midnight IST
 
 [Timer]
 OnCalendar=*-*-* 00:00:00 Asia/Kolkata
