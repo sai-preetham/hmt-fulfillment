@@ -23,9 +23,10 @@ test('groups current open and pending Chatwoot conversations by assignee', () =>
 
 test('loads exact daily counts and paginated current backlog from Chatwoot', async () => {
   const requests = [];
-  const fetchImpl = async input => {
+  const fetchImpl = async (input, options) => {
     const url = new URL(input);
     requests.push(url);
+    assert.equal(options.headers['api-access-token'], 'token');
     if (url.pathname.endsWith('/reports/summary')) return jsonResponse({ conversations_count: 12, resolutions_count: 9 });
     const status = url.searchParams.get('status');
     const page = Number(url.searchParams.get('page'));
