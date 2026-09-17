@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isAuthRequired, isAutomationAuthBypassAllowed, isLocalAuthBypassAllowed } from '../lib/auth-guard.js';
+import { isAuthRequired, isAutomationAuthBypassAllowed, isLocalAuthBypassAllowed, isPublicRoute } from '../lib/auth-guard.js';
 
 function requestFor(hostname, pathname = '/', authorization = '') {
   return {
@@ -30,6 +30,13 @@ test('localhost auth bypass is disabled in production', () => {
 
 test('localhost auth bypass remains available in development', () => {
   assert.equal(isLocalAuthBypassAllowed(requestFor('localhost'), { NODE_ENV: 'development' }), true);
+});
+
+test('only the bulk document page is publicly accessible', () => {
+  assert.equal(isPublicRoute(requestFor('ops.holdmythrottle.com', '/bulk')), true);
+  assert.equal(isPublicRoute(requestFor('ops.holdmythrottle.com', '/bulk/')), true);
+  assert.equal(isPublicRoute(requestFor('ops.holdmythrottle.com', '/bulk/orders')), false);
+  assert.equal(isPublicRoute(requestFor('ops.holdmythrottle.com', '/orders')), false);
 });
 
 test('automation bearer bypass is limited to protected automation APIs', () => {

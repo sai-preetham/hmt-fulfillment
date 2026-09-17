@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { isAuthRequired, isAutomationAuthBypassAllowed, isLocalAuthBypassAllowed } from './lib/auth-guard.js';
+import { isAuthRequired, isAutomationAuthBypassAllowed, isLocalAuthBypassAllowed, isPublicRoute } from './lib/auth-guard.js';
 import { hasPermission, permissionForPath } from './lib/access-control.js';
 
 export async function proxy(request) {
@@ -9,7 +9,7 @@ export async function proxy(request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 
-  if (!authRequired || isLocalAuthBypassAllowed(request) || isAutomationAuthBypassAllowed(request) || request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/forgot-password') || request.nextUrl.pathname.startsWith('/reset-password')) return NextResponse.next();
+  if (!authRequired || isPublicRoute(request) || isLocalAuthBypassAllowed(request) || isAutomationAuthBypassAllowed(request) || request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/forgot-password') || request.nextUrl.pathname.startsWith('/reset-password')) return NextResponse.next();
 
   if (!url || !anonKey) {
     if (request.nextUrl.pathname.startsWith('/login')) return NextResponse.next();
