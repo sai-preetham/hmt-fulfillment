@@ -46,6 +46,7 @@ test('automation bearer bypass is limited to protected automation APIs', () => {
   assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/api/integrations/chatwoot/daily-report', 'Bearer secret-1'), env), true);
   assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/api/automation/run', 'Bearer wrong'), env), false);
   assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/orders', 'Bearer secret-1'), env), false);
+  assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/api/integrations/woocommerce/sync', 'Bearer secret-1'), env), true);
 });
 
 test('Woo ingest secret bypass is limited to woocommerce integration APIs', () => {
