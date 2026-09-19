@@ -37,12 +37,13 @@ export async function createWixFulfillment(order, shipment, config) {
 
   const fulfillment =
     payload?.fulfillment ||
+    payload?.orderWithFulfillments?.fulfillments?.find(item => item?.id === payload?.fulfillmentId) ||
     payload?.orderWithFulfillments?.fulfillments?.find(item => item?.trackingInfo?.trackingNumber === shipment.waybill) ||
     payload?.fulfillments?.find(item => item?.trackingInfo?.trackingNumber === shipment.waybill) ||
     {};
   return {
     status: 'synced',
-    fulfillmentId: fulfillment.id || payload?.id || '',
+    fulfillmentId: fulfillment.id || payload?.fulfillmentId || payload?.id || '',
     response: payload
   };
 }

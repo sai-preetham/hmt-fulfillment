@@ -53,7 +53,7 @@ export async function fulfillManualShipmentInWix(order, shipment, config) {
   });
 
   try {
-    const normalizedShipment = normalizeShipmentForWix(shipment);
+    const normalizedShipment = normalizeShipmentForWix(shipment, order);
     const result = order.wix_fulfillment_id
       ? await updateWixFulfillmentTracking(order, order.wix_fulfillment_id, normalizedShipment, config)
       : await createWixFulfillment(order, normalizedShipment, config);
@@ -119,7 +119,7 @@ async function syncWixFulfillment(order, shipment, config, fulfillmentStatus) {
 
   try {
     const existingFulfillmentId = order.wix_fulfillment_id || shipment.wix_fulfillment_id || '';
-    const normalizedShipment = normalizeShipmentForWix(shipment);
+    const normalizedShipment = normalizeShipmentForWix(shipment, order);
     const result = await createWixFulfillment(order, normalizedShipment, config);
 
     if (result.skipped) {
@@ -144,8 +144,10 @@ async function syncWixFulfillment(order, shipment, config, fulfillmentStatus) {
   }
 }
 
-function normalizeShipmentForWix(shipment) {
-  const courier = String(shipment.courier_code || shipment.courier || 'delhivery')
+function normalizeShipmentForWix(shipment, order = null) {
+  const courier = String(
+    shipment.courier_code || shipment.courier || order?.courier || 'delhivery'
+  )
     .trim()
     .toLowerCase() || 'delhivery';
   return {
@@ -153,7 +155,8 @@ function normalizeShipmentForWix(shipment) {
     // Never use shipment.source — that is order/source provenance, not courier.
     courier_code: courier,
     courier_service_code: shipment.courier_service_code || (shipment.shippingMode === 'S' ? 'surface' : 'express'),
-    tracking_url: shipment.tracking_url || '',
+    // shipments table has no tracking_url column; fall back to order.tracking_url.
+    tracking_url: shipment.tracking_url || order?.tracking_url || '',
     service_mode:
       shipment.service_mode ||
       shipment.internationalService ||

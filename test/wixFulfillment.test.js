@@ -44,11 +44,31 @@ test('reads a fulfillment ID from Wix order-with-fulfillments responses', async 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => ({
     ok: true,
-    text: async () => JSON.stringify({ orderWithFulfillments: { fulfillments: [{ id: 'fulfillment-2', trackingInfo: { trackingNumber: 'awb-1' } }] } })
+    text: async () => JSON.stringify({
+      fulfillmentId: 'fulfillment-2',
+      orderWithFulfillments: { fulfillments: [{ id: 'fulfillment-2', trackingInfo: { trackingNumber: 'awb-1' } }] }
+    })
   });
   try {
     const result = await createWixFulfillment({ wix_order_id: 'wix-order-1', raw_order: { lineItems: [] } }, { waybill: 'awb-1' }, config());
     assert.equal(result.fulfillmentId, 'fulfillment-2');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('falls back to top-level fulfillmentId when fulfillments array omits tracking', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    text: async () => JSON.stringify({
+      fulfillmentId: 'fulfillment-top',
+      orderWithFulfillments: { fulfillments: [{ id: 'fulfillment-top' }] }
+    })
+  });
+  try {
+    const result = await createWixFulfillment({ wix_order_id: 'wix-order-1', raw_order: { lineItems: [] } }, { waybill: 'awb-1' }, config());
+    assert.equal(result.fulfillmentId, 'fulfillment-top');
   } finally {
     globalThis.fetch = originalFetch;
   }
