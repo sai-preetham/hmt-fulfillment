@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isAuthRequired, isAutomationAuthBypassAllowed, isLocalAuthBypassAllowed, isPublicRoute } from '../lib/auth-guard.js';
+import { isAuthRequired, isAutomationAuthBypassAllowed, isLocalAuthBypassAllowed, isPublicRoute, isWooIngestAuthBypassAllowed } from '../lib/auth-guard.js';
 
 function requestFor(hostname, pathname = '/', authorization = '') {
   return {
@@ -46,4 +46,29 @@ test('automation bearer bypass is limited to protected automation APIs', () => {
   assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/api/integrations/chatwoot/daily-report', 'Bearer secret-1'), env), true);
   assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/api/automation/run', 'Bearer wrong'), env), false);
   assert.equal(isAutomationAuthBypassAllowed(requestFor('ops.holdmythrottle.com', '/orders', 'Bearer secret-1'), env), false);
+});
+
+test('Woo ingest secret bypass is limited to woocommerce integration APIs', () => {
+  const env = { WOO_OPS_INGEST_SECRET: 'woo-secret' };
+  assert.equal(
+    isWooIngestAuthBypassAllowed(
+      { nextUrl: { pathname: '/api/integrations/woocommerce/orders' }, headers: new Headers({ 'x-ops-woo-secret': 'woo-secret' }) },
+      env
+    ),
+    true
+  );
+  assert.equal(
+    isWooIngestAuthBypassAllowed(
+      { nextUrl: { pathname: '/api/integrations/woocommerce/orders' }, headers: new Headers({ authorization: 'Bearer woo-secret' }) },
+      env
+    ),
+    true
+  );
+  assert.equal(
+    isWooIngestAuthBypassAllowed(
+      { nextUrl: { pathname: '/orders' }, headers: new Headers({ 'x-ops-woo-secret': 'woo-secret' }) },
+      env
+    ),
+    false
+  );
 });

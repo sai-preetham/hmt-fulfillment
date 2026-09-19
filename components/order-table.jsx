@@ -32,6 +32,7 @@ export function OrderFilters({ query = '', status = '', source = '', action = '/
         <select name="source" defaultValue={source}>
           <option value="">All sources</option>
           <option value="wix">Wix</option>
+          <option value="woocommerce">WooCommerce</option>
           <option value="amazon">Amazon</option>
           <option value="manual">Manual</option>
         </select>

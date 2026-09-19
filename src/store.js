@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { buildAudit, buildOrderShipmentSummary, normalizeShipmentRecord, normalizeWixOrder, normalizeAmazonOrder } from './fulfillment.js';
+import { buildAudit, buildOrderShipmentSummary, normalizeShipmentRecord, normalizeWixOrder, normalizeAmazonOrder, normalizeWooCommerceOrder } from './fulfillment.js';
 import { getConfig } from './config.js';
 import { isSupabaseConfigured, SupabaseRestClient } from './supabase.js';
 import { findMatchingShipment } from '../lib/crm/shipment-dedup.js';
@@ -927,4 +927,117 @@ async function upsertAmazonCustomer(supabase, customer) {
     }
   }
   return supabase.insert('customers', customer);
+}
+
+
+export async function upsertWooCommerceOrder(wooPayload) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+  return upsertSupabaseWooCommerceOrder(supabase, wooPayload);
+}
+
+export async function upsertWooCommerceOrders(orders) {
+  const results = [];
+  for (const order of orders) {
+    results.push(await upsertWooCommerceOrder(order));
+  }
+  return results.filter(Boolean);
+}
+
+async function upsertSupabaseWooCommerceOrder(supabase, wooPayload) {
+  const normalized = normalizeWooCommerceOrder(wooPayload, getConfig());
+  const wooOrderId = normalized.order.woo_order_id;
+  const existingOrder = await findSupabaseOrderByWooId(supabase, wooOrderId);
+  const customer = await upsertAmazonCustomer(supabase, normalized.customer);
+  const shippingAddress = existingOrder?.shipping_address_id
+    ? { id: existingOrder.shipping_address_id }
+    : await insertAddress(supabase, customer.id, normalized.shippingAddress);
+  const billingAddress = existingOrder?.billing_address_id
+    ? { id: existingOrder.billing_address_id }
+    : await insertAddress(supabase, customer.id, normalized.billingAddress);
+
+  const orderRow = {
+    ...normalized.order,
+    ...buildWooCrmStatusPatch(existingOrder, normalized.order),
+    customer_id: customer.id,
+    shipping_address_id: shippingAddress?.id || null,
+    billing_address_id: billingAddress?.id || null,
+    updated_at: new Date().toISOString()
+  };
+
+  let savedOrder;
+  try {
+    savedOrder = await supabase.upsert('orders', orderRow, 'woo_order_id');
+  } catch (error) {
+    // Fallback when migration 016 has not been applied yet: reuse Amazon-style source+external unique index.
+    if (!String(error.message || error).includes('woo_order_id')) throw error;
+    const { woo_order_id: _ignored, ...withoutWooColumn } = orderRow;
+    savedOrder = await supabase.upsert('orders', withoutWooColumn, 'source,external_order_id');
+  }
+
+  for (const item of normalized.items) {
+    await supabase.upsert('order_items', { ...item, order_id: savedOrder.id }, 'order_id,wix_line_item_id');
+    if (item.sku) {
+      await supabase.upsert(
+        'inventory_items',
+        {
+          sku: item.sku,
+          product_name: item.product_name,
+          hsn_code: item.hsn_code,
+          default_weight_grams: item.weight ? item.weight * 1000 : null
+        },
+        'sku'
+      );
+    }
+  }
+
+  await supabase.upsert('payment_refs', { ...normalized.payment, order_id: savedOrder.id }, 'order_id');
+  await writeAudit(
+    supabase,
+    'orders',
+    savedOrder.id,
+    existingOrder ? 'woo_resync' : 'woo_import',
+    existingOrder,
+    savedOrder,
+    'woocommerce order ingest'
+  );
+  return { order: savedOrder, created: !existingOrder, updated: Boolean(existingOrder) };
+}
+
+function buildWooCrmStatusPatch(existingOrder, sourceOrder) {
+  if (existingOrder) {
+    if (sourceOrder.status === 'canceled' || sourceOrder.status === 'cancelled') {
+      return { internal_status: 'cancelled' };
+    }
+    return {};
+  }
+
+  if (sourceOrder.status === 'canceled' || sourceOrder.status === 'cancelled') {
+    return { internal_status: 'cancelled' };
+  }
+  if (sourceOrder.payment_status === 'paid') {
+    return { internal_status: 'awaiting_packing' };
+  }
+  if (sourceOrder.payment_status === 'pending') {
+    return { internal_status: 'not_paid' };
+  }
+  return { internal_status: 'new' };
+}
+
+async function findSupabaseOrderByWooId(supabase, wooOrderId) {
+  if (!wooOrderId) return null;
+  try {
+    const byWoo = await supabase.select(
+      'orders',
+      `woo_order_id=eq.${encodeURIComponent(wooOrderId)}&limit=1`
+    );
+    if (byWoo?.[0]) return byWoo[0];
+  } catch {
+    // Column may not exist until migration 016 is applied.
+  }
+  const rows = await supabase.select(
+    'orders',
+    `external_order_id=eq.${encodeURIComponent(wooOrderId)}&source=eq.woocommerce&limit=1`
+  );
+  return rows[0] || null;
 }
