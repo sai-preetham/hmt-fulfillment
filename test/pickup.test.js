@@ -38,10 +38,16 @@ const { code } = transformSync(readFileSync(new URL('../lib/crm/data.js', import
   filename: 'data.js', jsc: { parser: { syntax: 'ecmascript' }, target: 'es2022' }, module: { type: 'commonjs' }
 });
 
-function pickupHarness({ status = 'booked', wix = true, syncFails = false } = {}) {
+function pickupHarness({ status = 'booked', wix = true, woo = false, syncFails = false, wooFails = false } = {}) {
   let row = { ...shipment, id: 'shipment-1', order_id: 'order-1', status };
-  let order = { id: 'order-1', wix_order_id: wix ? 'wix-1' : null };
+  let order = {
+    id: 'order-1',
+    wix_order_id: wix ? 'wix-1' : null,
+    source: woo ? 'woocommerce' : (wix ? 'wix' : 'manual'),
+    woo_order_id: woo ? '555' : null
+  };
   let calls = 0;
+  let wooCalls = 0;
   const client = { from(table) {
     let patch;
     const query = {
@@ -65,18 +71,30 @@ function pickupHarness({ status = 'booked', wix = true, syncFails = false } = {}
     '@/lib/supabase/server': { createServiceClient: () => client },
     './order-search': {}, '@/src/shipmentValidation.js': {}, './seed': {},
     '@/src/store.js': { findOrderById: async () => order },
-    '@/src/config.js': { getConfig: () => ({ wix: { fulfillmentSyncEnabled: true } }) },
+    '@/src/config.js': { getConfig: () => ({
+      wix: { fulfillmentSyncEnabled: true },
+      woocommerce: { shipmentWriteback: { enabled: true }, baseUrl: 'https://wp.example', consumerKey: 'ck', consumerSecret: 'cs' }
+    }) },
     './data-settings': { getCrmSettings: async () => ({}) },
     './settings': { applyCrmSettingsToConfig: config => config },
     '@/src/wixShipmentSync.js': { fulfillManualShipmentInWix: async (_, picked) => {
       calls++;
       assert.equal(picked.status, status === 'booked' ? 'picked-up' : status);
       order = { ...order, wix_fulfillment_status: syncFails ? 'failed' : 'fulfilled', wix_fulfillment_error: syncFails ? 'Wix unavailable' : null };
-    } }
+    } },
+    '@/src/wooShipmentSync.js': {
+      isWooCommerceOrder: o => o?.source === 'woocommerce' && Boolean(o?.woo_order_id),
+      writeWooShipmentOnPickedUp: async () => {
+        wooCalls++;
+        if (wooFails) return { ok: false, error: 'Woo unavailable' };
+        return { ok: true };
+      },
+      writeWooShipmentOnBooked: async () => ({ ok: true })
+    }
   };
   const exports = {};
-  runInNewContext(code, { exports, require: name => { if (!(name in mocks)) throw new Error(name); return mocks[name]; } });
-  return { run: () => exports.markShipmentPickedUp('order-1', 'shipment-1'), calls: () => calls };
+  runInNewContext(code, { exports, require: name => { if (!(name in mocks)) throw new Error(name); return mocks[name]; }, console, Boolean });
+  return { run: () => exports.markShipmentPickedUp('order-1', 'shipment-1'), calls: () => calls, wooCalls: () => wooCalls };
 }
 
 test('manual pickup records collection and fulfills Wix', async () => {
@@ -102,6 +120,20 @@ test('non-Wix pickup does not call Wix', async () => {
   const harness = pickupHarness({ wix: false });
   assert.equal((await harness.run()).ok, true);
   assert.equal(harness.calls(), 0);
+});
+test('Woo pickup writes shipment meta and keeps Ops ok on Woo soft-fail', async () => {
+  const okHarness = pickupHarness({ wix: false, woo: true });
+  const ok = await okHarness.run();
+  assert.equal(ok.ok, true);
+  assert.equal(okHarness.calls(), 0);
+  assert.equal(okHarness.wooCalls(), 1);
+  assert.match(ok.message, /WooCommerce tracking meta/);
+
+  const failHarness = pickupHarness({ wix: false, woo: true, wooFails: true });
+  const failed = await failHarness.run();
+  assert.equal(failed.ok, true);
+  assert.equal(failHarness.wooCalls(), 1);
+  assert.equal(failed.woo_writeback.ok, false);
 });
 test('inactive shipment cannot trigger fulfillment', async () => {
   const harness = pickupHarness({ status: 'cancelled' });
