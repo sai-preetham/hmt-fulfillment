@@ -319,3 +319,216 @@ function mapAmazonFulfillmentStatus(status) {
     default: return 'not_fulfilled';
   }
 }
+
+/**
+ * Normalize a WooCommerce REST/webhook order payload into Ops CRM rows.
+ * Accepts the raw Woo order object (order.created / order.updated body),
+ * or `{ order: <wooOrder> }` / `{ woo_order: <wooOrder> }` wrappers.
+ */
+export function normalizeWooCommerceOrder(payload, config = {}) {
+  const order = unwrapWooOrder(payload);
+  if (!order?.id && order?.id !== 0) {
+    throw new Error('WooCommerce order payload missing id.');
+  }
+
+  const wooOrderId = String(order.id);
+  const orderNumber = String(order.number || order.id);
+  const billing = order.billing || {};
+  const shipping = order.shipping || {};
+  const shipHasAddress = Boolean(shipping.address_1 || shipping.city || shipping.postcode);
+  const addressSource = shipHasAddress ? shipping : billing;
+  const customerName =
+    [addressSource.first_name, addressSource.last_name].filter(Boolean).join(' ').trim() ||
+    [billing.first_name, billing.last_name].filter(Boolean).join(' ').trim() ||
+    'WooCommerce Customer';
+  const phone = shipping.phone || billing.phone || order.billing?.phone || null;
+  const email = order.billing?.email || billing.email || null;
+  const paymentStatus = mapWooPaymentStatus(order);
+  const fulfillmentStatus = mapWooFulfillmentStatus(order.status);
+  const status = mapWooStatus(order.status);
+  const currency = order.currency || 'INR';
+  const lineItems = Array.isArray(order.line_items) ? order.line_items : [];
+
+  return {
+    customer: {
+      wix_contact_id: null,
+      name: customerName,
+      email: email || null,
+      phone: phone || null,
+      tax_id: null,
+      tax_id_type: null,
+      raw_customer: {
+        billing,
+        shipping,
+        customer_id: order.customer_id || null
+      }
+    },
+    shippingAddress: {
+      address_type: 'shipping',
+      name:
+        [addressSource.first_name, addressSource.last_name].filter(Boolean).join(' ').trim() ||
+        customerName,
+      phone: addressSource.phone || phone || null,
+      address_line1: addressSource.address_1 || '',
+      address_line2: addressSource.address_2 || '',
+      city: addressSource.city || '',
+      state: addressSource.state || '',
+      postal_code: addressSource.postcode || '',
+      country: addressSource.country || 'IN',
+      raw_address: { address: addressSource }
+    },
+    billingAddress: {
+      address_type: 'billing',
+      name: [billing.first_name, billing.last_name].filter(Boolean).join(' ').trim() || customerName,
+      phone: billing.phone || phone || null,
+      address_line1: billing.address_1 || '',
+      address_line2: billing.address_2 || '',
+      city: billing.city || '',
+      state: billing.state || '',
+      postal_code: billing.postcode || '',
+      country: billing.country || 'IN',
+      raw_address: { address: billing }
+    },
+    order: {
+      wix_order_id: null,
+      woo_order_id: wooOrderId,
+      external_order_id: wooOrderId,
+      order_number: orderNumber,
+      source: 'woocommerce',
+      status,
+      payment_status: paymentStatus,
+      fulfillment_status: fulfillmentStatus,
+      currency,
+      subtotal: lineItems.reduce((sum, item) => sum + numberAmount(item.subtotal != null ? item.subtotal : item.total), 0) || numberAmount(order.total),
+      shipping_amount: numberAmount(order.shipping_total),
+      tax_amount: numberAmount(order.total_tax),
+      discount_amount: numberAmount(order.discount_total),
+      total_amount: numberAmount(order.total),
+      selected_shipping_title: firstWooShippingTitle(order),
+      source_created_at: wooTimestamp(order.date_created_gmt, order.date_created),
+      source_updated_at: wooTimestamp(order.date_modified_gmt, order.date_modified),
+      raw_order: redactPaymentSecrets(order),
+      bike_model: firstWooProductName(lineItems),
+      product_variant: firstWooVariant(lineItems),
+      quantity: lineItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0) || 1,
+      whatsapp_number: phone || null
+    },
+    items: lineItems.map(item => ({
+      wix_line_item_id: item.id != null ? String(item.id) : `woo-${wooOrderId}-${item.sku || item.name || 'item'}`,
+      catalog_item_id: item.product_id != null ? String(item.product_id) : null,
+      variant_id: item.variation_id ? String(item.variation_id) : null,
+      sku: item.sku || null,
+      product_name: item.name || null,
+      quantity: Number(item.quantity || 1),
+      item_price: numberAmount(item.price),
+      total_price: numberAmount(item.total),
+      weight: config.defaults?.weightGrams ? config.defaults.weightGrams / 1000 : null,
+      hsn_code: config.defaults?.hsnCode || null,
+      tax_info: { total_tax: item.total_tax, taxes: item.taxes || [] },
+      raw_line_item: item
+    })),
+    payment: {
+      payment_status: paymentStatus,
+      payment_method: order.payment_method_title || order.payment_method || 'WooCommerce',
+      transaction_ref: order.transaction_id || wooOrderId,
+      paid_amount: paymentStatus === 'paid' ? numberAmount(order.total) : 0,
+      refunded_amount: Array.isArray(order.refunds)
+        ? order.refunds.reduce((sum, refund) => sum + Math.abs(numberAmount(refund.total)), 0)
+        : 0,
+      authorized_amount: numberAmount(order.total),
+      currency,
+      raw_payment: {
+        payment_method: order.payment_method,
+        payment_method_title: order.payment_method_title,
+        date_paid: order.date_paid || order.date_paid_gmt || null,
+        transaction_id: order.transaction_id || null
+      }
+    }
+  };
+}
+
+function unwrapWooOrder(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  if (payload.id != null && (payload.billing || payload.line_items || payload.number != null)) return payload;
+  if (payload.order && typeof payload.order === 'object') return payload.order;
+  if (payload.woo_order && typeof payload.woo_order === 'object') return payload.woo_order;
+  if (payload.data && typeof payload.data === 'object') return unwrapWooOrder(payload.data);
+  return payload;
+}
+
+function mapWooPaymentStatus(order) {
+  const status = String(order.status || '').toLowerCase();
+  if (status === 'cancelled' || status === 'canceled' || status === 'failed' || status === 'trash') {
+    return 'not_paid';
+  }
+  if (status === 'refunded') return 'refunded';
+  if (order.date_paid || order.date_paid_gmt) return 'paid';
+  if (['processing', 'completed', 'shipped'].includes(status)) return 'paid';
+  if (status === 'on-hold') return 'pending';
+  if (status === 'pending') return 'pending';
+  return status || 'pending';
+}
+
+function mapWooStatus(status) {
+  switch (String(status || '').toLowerCase()) {
+    case 'pending':
+      return 'pending';
+    case 'processing':
+    case 'on-hold':
+      return 'paid';
+    case 'completed':
+      return 'fulfilled';
+    case 'cancelled':
+    case 'canceled':
+    case 'trash':
+      return 'canceled';
+    case 'refunded':
+      return 'refunded';
+    case 'failed':
+      return 'failed';
+    default:
+      return status || 'unknown';
+  }
+}
+
+function mapWooFulfillmentStatus(status) {
+  switch (String(status || '').toLowerCase()) {
+    case 'completed':
+      return 'fulfilled';
+    case 'cancelled':
+    case 'canceled':
+    case 'trash':
+      return 'canceled';
+    default:
+      return 'not_fulfilled';
+  }
+}
+
+function firstWooShippingTitle(order) {
+  const lines = Array.isArray(order.shipping_lines) ? order.shipping_lines : [];
+  return lines[0]?.method_title || lines[0]?.method_id || null;
+}
+
+function firstWooProductName(lineItems) {
+  return lineItems[0]?.name || null;
+}
+
+function firstWooVariant(lineItems) {
+  const item = lineItems[0];
+  if (!item) return null;
+  const meta = Array.isArray(item.meta_data) ? item.meta_data : [];
+  const parts = meta
+    .filter(m => m && m.display_key && m.display_value)
+    .map(m => `${m.display_key}: ${m.display_value}`);
+  if (parts.length) return parts.join(', ');
+  return item.sku || null;
+}
+
+function wooTimestamp(gmtValue, localValue) {
+  if (gmtValue) {
+    const raw = String(gmtValue).trim();
+    if (/Z$|[+-]\d{2}:?\d{2}$/.test(raw)) return raw;
+    return `${raw}Z`;
+  }
+  return localValue || null;
+}
