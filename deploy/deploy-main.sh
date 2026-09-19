@@ -38,7 +38,6 @@ if [[ -d "$release" ]]; then
 fi
 mkdir -p "$release"
 git --git-dir="$cache" archive "$sha" | tar -x -C "$release"
-ln -s "$shared/.env" "$release/.env"
 ln -s "$shared/data" "$release/data"
 printf '%s\n' "$sha" > "$release/.release-sha"
 printf 'APP_RELEASE_SHA=%s\n' "$sha" > "$release/.release.env"
@@ -46,7 +45,9 @@ cd "$release"
 echo "Building main commit $sha"
 export NEXT_TELEMETRY_DISABLED=1
 npm ci --no-audit --no-fund
+# Run unit tests without production .env so live flags cannot poison fail-closed cases.
 npm test
+ln -s "$shared/.env" "$release/.env"
 npm run build
 # Skip an obsolete candidate if main advanced while the build ran.
 git --git-dir="$cache" fetch --quiet origin +refs/heads/main:refs/heads/main
