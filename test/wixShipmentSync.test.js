@@ -136,6 +136,7 @@ test('fulfills Wix with tracking when an operator explicitly marks the shipment 
     const wixRequest = requests.find(request => request.url.includes('/create-fulfillment'));
     const orderPatches = requests.filter(request => request.url.includes('/rest/v1/orders') && request.method === 'PATCH');
     assert.equal(wixRequest.body.fulfillment.trackingInfo.trackingNumber, 'INTL123');
+    assert.equal(wixRequest.body.fulfillment.trackingInfo.shippingProvider, 'fedex');
     assert.equal(wixRequest.body.fulfillment.trackingInfo.trackingLink, 'https://carrier.example/INTL123');
     assert.equal(orderPatches.at(-1).body.fulfillment_status, 'FULFILLED');
     assert.equal(orderPatches.at(-1).body.wix_fulfillment_status, 'fulfilled');
