@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildTrackingUrl, createWixFulfillment, deleteWixFulfillment, updateWixFulfillmentTracking } from '../src/wixFulfillment.js';
+import { buildTrackingUrl, createWixFulfillment, deleteWixFulfillment, resolveWixShippingProvider, updateWixFulfillmentTracking } from '../src/wixFulfillment.js';
 
 test('creates Wix fulfillment with awb tracking details', async () => {
   const originalFetch = globalThis.fetch;
@@ -32,7 +32,8 @@ test('creates Wix fulfillment with awb tracking details', async () => {
     assert.equal(result.fulfillmentId, 'fulfillment-1');
     assert.equal(request.url, 'https://www.wixapis.com/ecom/v1/fulfillments/orders/wix-order-1/create-fulfillment');
     assert.equal(request.body.fulfillment.trackingInfo.trackingNumber, 'awb-1');
-    assert.equal(request.body.fulfillment.trackingInfo.shippingProvider, 'Express');
+    assert.equal(request.body.fulfillment.trackingInfo.shippingProvider, 'delhivery');
+    assert.ok(request.body.fulfillment.trackingInfo.trackingLink.includes('awb-1'));
     assert.equal(request.body.fulfillment.lineItems[0].id, 'line-1');
   } finally {
     globalThis.fetch = originalFetch;
@@ -75,6 +76,8 @@ test('updates tracking on an existing Wix fulfillment for a rebooked shipment', 
     assert.equal(request.options.method, 'PATCH');
     assert.equal(request.url, 'https://www.wixapis.com/ecom/v1/fulfillments/fulfillment-1/orders/wix-order-1');
     assert.equal(request.body.fulfillment.trackingInfo.trackingNumber, 'awb-new');
+    assert.equal(request.body.fulfillment.trackingInfo.shippingProvider, 'delhivery');
+    assert.ok(request.body.fulfillment.trackingInfo.trackingLink);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -110,3 +113,10 @@ function config() {
     delhivery: {}
   };
 }
+
+test('resolveWixShippingProvider prefers courier slug over service_mode', () => {
+  assert.equal(resolveWixShippingProvider({ courier_code: 'delhivery', service_mode: 'Express' }), 'delhivery');
+  assert.equal(resolveWixShippingProvider({ courier_code: 'fedex', service_mode: 'FedEx International' }), 'fedex');
+  assert.equal(resolveWixShippingProvider({ courier_code: 'shiprocket' }), 'shiprocket');
+  assert.equal(resolveWixShippingProvider({ service_mode: 'Express' }), 'delhivery');
+});

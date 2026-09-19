@@ -11,7 +11,7 @@ export async function createWixFulfillment(order, shipment, config) {
     fulfillment: removeEmpty({
       trackingInfo: removeEmpty({
         trackingNumber: shipment.waybill,
-        shippingProvider: shipment.service_mode || shipment.courier_service_code || shipment.courier_code || 'Delhivery',
+        shippingProvider: resolveWixShippingProvider(shipment),
         trackingLink: buildTrackingUrl(shipment.waybill, config, shipment.courier_code, shipment.tracking_url)
       }),
       lineItems: buildLineItems(order.raw_order)
@@ -63,7 +63,7 @@ export async function updateWixFulfillmentTracking(order, fulfillmentId, shipmen
     fulfillment: {
       trackingInfo: removeEmpty({
         trackingNumber: shipment.waybill,
-        shippingProvider: shipment.service_mode || shipment.courier_service_code || shipment.courier_code || 'Delhivery',
+        shippingProvider: resolveWixShippingProvider(shipment),
         trackingLink: buildTrackingUrl(shipment.waybill, config, shipment.courier_code, shipment.tracking_url)
       })
     }
@@ -98,6 +98,24 @@ export async function deleteWixFulfillment(order, fulfillmentId, config) {
   return { status: 'deleted', fulfillmentId, response: payload };
 }
 
+
+/** Map Ops courier to a Wix shippingProvider slug. Never use service_mode (Express/Surface). */
+export function resolveWixShippingProvider(shipment = {}) {
+  const raw = String(
+    shipment.courier_code ||
+      shipment.courier ||
+      shipment.courierCode ||
+      ''
+  )
+    .trim()
+    .toLowerCase();
+  if (raw.includes('fedex')) return 'fedex';
+  if (raw.includes('shiprocket') || raw === 'sr') return 'shiprocket';
+  if (raw.includes('delhivery') || raw === 'dlv' || raw === '') return 'delhivery';
+  // Custom carriers: keep a stable lowercase slug; trackingLink is always required.
+  return raw.replace(/[^a-z0-9_-]+/g, '-') || 'delhivery';
+}
+
 export function buildTrackingUrl(waybill, config, courierCode = 'delhivery', explicitTrackingUrl = '') {
   if (String(explicitTrackingUrl || '').trim()) return String(explicitTrackingUrl).trim();
   let template = config.wix.trackingUrlTemplate;
@@ -110,7 +128,16 @@ export function buildTrackingUrl(waybill, config, courierCode = 'delhivery', exp
       template = config.delhivery.trackingUrlTemplate || 'https://www.delhivery.com/track/package/{waybill}';
     }
   }
-  return template ? template.replaceAll('{waybill}', encodeURIComponent(waybill)) : '';
+  const link = template ? template.replaceAll('{waybill}', encodeURIComponent(waybill)) : '';
+  if (link) return link;
+  const fallbackCourier = String(courierCode || 'delhivery').toLowerCase();
+  if (fallbackCourier.includes('fedex')) {
+    return `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(waybill)}`;
+  }
+  if (fallbackCourier.includes('shiprocket')) {
+    return `https://www.shiprocket.in/shipment-tracking/${encodeURIComponent(waybill)}`;
+  }
+  return `https://www.delhivery.com/track/package/${encodeURIComponent(waybill)}`;
 }
 
 function buildLineItems(order) {

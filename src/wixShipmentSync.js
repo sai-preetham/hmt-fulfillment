@@ -145,9 +145,13 @@ async function syncWixFulfillment(order, shipment, config, fulfillmentStatus) {
 }
 
 function normalizeShipmentForWix(shipment) {
+  const courier = String(shipment.courier_code || shipment.courier || 'delhivery')
+    .trim()
+    .toLowerCase() || 'delhivery';
   return {
     waybill: shipment.waybill,
-    courier_code: shipment.source || shipment.courier_code || 'delhivery',
+    // Never use shipment.source — that is order/source provenance, not courier.
+    courier_code: courier,
     courier_service_code: shipment.courier_service_code || (shipment.shippingMode === 'S' ? 'surface' : 'express'),
     tracking_url: shipment.tracking_url || '',
     service_mode:
