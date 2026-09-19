@@ -45,3 +45,7 @@ curl -sS -X POST 'https://ops.holdmythrottle.com/api/integrations/woocommerce/or
 ### Migration
 
 Apply `supabase/migrations/016_woo_order_ingest.sql` (adds nullable unique `orders.woo_order_id`). Until applied, ingest falls back to `(source, external_order_id)`.
+
+## Related
+
+Ops-native pull/sync: see `docs/WOOCOMMERCE_ORDER_SYNC.md`.
