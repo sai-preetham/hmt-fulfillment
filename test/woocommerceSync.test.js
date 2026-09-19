@@ -103,7 +103,9 @@ test('watermark helpers bound cold runs and advance from orders', () => {
 });
 
 test('runWooOrderSync fails closed when disabled', async () => {
-  delete process.env.WOO_ORDER_SYNC_ENABLED;
+  // Force false — delete is unreliable when systemd/EnvironmentFile injects the var
+  // (as on saipi deploys that symlink production .env before npm test).
+  process.env.WOO_ORDER_SYNC_ENABLED = 'false';
   process.env.WOO_BASE_URL = 'https://wp-staging.holdmythrottle.com';
   process.env.WOO_CONSUMER_KEY = 'ck_test';
   process.env.WOO_CONSUMER_SECRET = 'cs_test';
