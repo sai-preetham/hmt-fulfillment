@@ -924,6 +924,31 @@ label span {
   text-align: center;
 }
 
+.issueFilters { grid-template-columns: minmax(260px, 1.5fr) repeat(5, minmax(135px, .7fr)) auto auto; }
+.issueTable tr[tabindex] { cursor: pointer; }
+.issueTable tr[tabindex]:hover td { background: #f8fafc; }
+.issueTable td:nth-child(1) { min-width: 210px; }
+.issueTable td:nth-child(2) { min-width: 160px; }
+.issueTable td:nth-child(6) { min-width: 240px; white-space: normal; }
+.overdueRow td:first-child { border-left: 3px solid var(--accent); }
+.issueDialog { width: min(920px, calc(100vw - 28px)); }
+.issueDialogBody { display: grid; gap: 20px; padding: 16px; }
+.issueDialogBody > .toolbar { border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+.issueActivity { border-top: 1px solid var(--line); padding-top: 16px; }
+.issueActivity summary { cursor: pointer; font-weight: 700; margin-top: 16px; }
+.issueHistory { margin-top: 14px; }
+.commentForm { align-items: end; display: grid; gap: 10px; grid-template-columns: 1fr auto; margin-bottom: 16px; }
+.commentForm textarea { min-height: 70px; }
+.issueCards { display: grid; gap: 10px; margin-top: 12px; }
+.issueCard { align-items: flex-start; background: #fff; border-color: var(--line); color: var(--ink); display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 1.4fr); text-align: left; width: 100%; }
+.issueCard:hover { border-color: var(--brand); }
+.issueCard.overdue { border-left: 4px solid var(--accent); }
+.issueCard strong, .issueCard small { display: block; }
+.issueCard small { color: var(--muted); margin-top: 4px; }
+.issuePlan { color: var(--muted); font-size: 13px; line-height: 1.4; }
+.orderIssuesPanel .panelBody > button { margin-bottom: 4px; }
+.srOnly { clip: rect(0, 0, 0, 0); height: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; white-space: nowrap; width: 1px; }
+
 .quickActions {
   display: flex;
   flex-wrap: wrap;
@@ -987,6 +1012,9 @@ label span {
   .formGrid {
     grid-template-columns: 1fr;
   }
+
+  .issueCard { grid-template-columns: 1fr; }
+  .commentForm { grid-template-columns: 1fr; }
 
   .opsSnapshot,
   .trackingSummary {

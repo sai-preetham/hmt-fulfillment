@@ -8,16 +8,21 @@ import { ShipmentForm } from '@/components/shipment-form';
 import { ShipmentActions } from '@/components/shipment-actions';
 import { ShippingLabelUpload } from '@/components/shipping-label-upload';
 import { StatusPill } from '@/components/status-pill';
+import { IssueWorkspace } from '@/components/issue-workspace';
+import { hasPermission } from '@/lib/access-control';
+import { currentUserProfile } from '@/lib/current-user';
 import { COMMUNICATION_TYPES } from '@/lib/crm/constants';
 import { formatCurrency, getOrder, shipmentFailureReason } from '@/lib/crm/data';
 import { getCrmSettings } from '@/lib/crm/data-settings';
+import { listActiveIssueUsers, listIssues } from '@/lib/crm/issues';
 
 export default async function OrderDetailPage({ params, searchParams }) {
   const { id } = await params;
   const noticeParams = await searchParams;
-  const [detail, crmSettings] = await Promise.all([getOrder(id), getCrmSettings()]);
+  const [detail, crmSettings, issues, issueUsers, profile] = await Promise.all([getOrder(id), getCrmSettings(), listIssues({ order_id: id }), listActiveIssueUsers(), currentUserProfile()]);
   if (!detail) notFound();
   const { order } = detail;
+  const openIssues = issues.filter(issue => issue.status !== 'resolved');
   const chatwootUrl = order.chatwoot_conversation_id
     ? `${process.env.CHATWOOT_BASE_URL || 'https://app.chatwoot.com'}/app/accounts/${process.env.CHATWOOT_ACCOUNT_ID || ''}/conversations/${order.chatwoot_conversation_id}`
     : '';
@@ -100,6 +105,7 @@ export default async function OrderDetailPage({ params, searchParams }) {
         <article className="card metric"><span>Feedback</span><StatusPill value={order.feedback_status} /></article>
         <article className="card metric"><span>Payment</span><StatusPill value={order.payment_status || detail.payment?.payment_status || 'not_set'} /><small>{formatCurrency(detail.payment?.paid_amount || order.order_value, order.currency)}</small></article>
         <article className="card metric"><span>Open work</span><strong>{openTasks.length}</strong><small>{order.assigned_operator || 'No owner assigned'}</small></article>
+        <article className="card metric"><span>Open issues</span><strong>{openIssues.length}</strong><small>{openIssues.filter(issue => !issue.assigned_user_id).length} unassigned</small></article>
       </section>
 
       <section className="grid orderOpsGrid">
@@ -324,6 +330,11 @@ export default async function OrderDetailPage({ params, searchParams }) {
             {!detail.timeline.some(item => String(item.event_type || '').includes('ship')) ? <p className="muted">Shipment activity will appear here automatically.</p> : null}
           </div>
         </section>
+      </section>
+
+      <section className="panel orderIssuesPanel">
+        <div className="panelHeader"><div><p className="workflowStep">Order support</p><h2>Issues</h2></div></div>
+        <div className="panelBody"><IssueWorkspace issues={issues} users={issueUsers} canEdit={hasPermission(profile, 'issues.edit')} orderId={order.id} compact /></div>
       </section>
 
       <section className="panel">
