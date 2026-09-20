@@ -1,3 +1,5 @@
+import { wooCommerceOrderToWixLike } from './wooOrderShape.js';
+
 export function mapWixOrderToDelhivery(order, config, options = {}) {
   const destination = order?.shippingInfo?.logistics?.shippingDestination;
   // A carrier booking must always go to the delivery address. Billing details
@@ -532,3 +534,91 @@ export function mapAmazonOrderToDelhivery(amazonPayload, config, options = {}) {
     }
   };
 }
+
+export function mapWooCommerceOrderToDelhivery(wooOrder, config, options = {}) {
+  const shipping = wooOrder?.shipping || {};
+  const billing = wooOrder?.billing || {};
+  const shipHasAddress = Boolean(shipping.address_1 || shipping.city || shipping.postcode);
+  const addressSource = shipHasAddress ? shipping : billing;
+
+  const address = {
+    addressLine: addressSource.address_1 || '',
+    addressLine2: addressSource.address_2 || '',
+    city: addressSource.city || '',
+    subdivision: addressSource.state || '',
+    postalCode: addressSource.postcode || '',
+    country: addressSource.country || 'IN',
+    ...nonEmptyValues(options.deliveryOverride?.address)
+  };
+  const contact = {
+    firstName: addressSource.first_name || billing.first_name || '',
+    lastName: addressSource.last_name || billing.last_name || '',
+    phone: addressSource.phone || billing.phone || '',
+    ...nonEmptyValues(options.deliveryOverride?.contact)
+  };
+
+  const country = address.country || 'IN';
+  if (isInternationalCountry(country)) {
+    return mapWixOrderToInternationalDelhivery(wooCommerceOrderToWixLike(wooOrder), config, options);
+  }
+
+  const lineItems = Array.isArray(wooOrder?.line_items) ? wooOrder.line_items : [];
+  const totalAmount = amount(wooOrder?.total) || lineItems.reduce((sum, item) => sum + amount(item.total ?? item.subtotal), 0);
+  const paymentMode = options.reverse ? 'Pickup' : inferWooPaymentMode(wooOrder, config);
+  const codAmount = paymentMode === 'COD' ? totalAmount : 0;
+  const orderId =
+    options.orderNumberOverride ||
+    (wooOrder?.number != null ? String(wooOrder.number) : '') ||
+    (wooOrder?.id != null ? String(wooOrder.id) : '');
+  validateSupportedDestination(address);
+
+  const shipment = removeEmpty({
+    name: fullName(contact),
+    add: formatAddress(address),
+    city: address.city,
+    state: normalizeSubdivision(address.subdivision || address.subdivisionFullname),
+    country,
+    pin: address.postalCode,
+    phone: contact.phone,
+    order: orderId,
+    payment_mode: paymentMode,
+    cod_amount: codAmount,
+    total_amount: totalAmount,
+    quantity: lineItems.reduce((sum, item) => sum + Number(item.quantity || 1), 0) || 1,
+    products_desc: lineItems
+      .map(item => `${item.name || 'Item'}${item.sku ? ` ${item.sku}` : ''} x${item.quantity || 1}`)
+      .join(', ')
+      .slice(0, 250),
+    shipment_width: config.defaults.widthCm,
+    shipment_height: config.defaults.heightCm,
+    shipment_length: config.defaults.lengthCm,
+    weight: config.defaults.weightGrams,
+    seller_gst_tin: config.defaults.sellerGstTin,
+    hsn_code: config.defaults.hsnCode,
+    md: config.defaults.shippingMode,
+    shipping_mode: shippingModeLabel(config.defaults.shippingMode),
+    shipment_mode: shippingModeLabel(config.defaults.shippingMode),
+    return_name: options.reverse ? config.delhivery.returnName : undefined,
+    return_add: options.reverse ? config.delhivery.returnAddress : undefined,
+    return_city: options.reverse ? config.delhivery.returnCity : undefined,
+    return_state: options.reverse ? config.delhivery.returnState : undefined,
+    return_pin: options.reverse ? config.delhivery.returnPincode : undefined,
+    return_phone: options.reverse ? config.delhivery.returnPhone : undefined
+  });
+
+  return {
+    shipments: [sanitizeShipment(shipment)],
+    pickup_location: {
+      name: config.delhivery.pickupLocation
+    }
+  };
+}
+
+function inferWooPaymentMode(order, config) {
+  const method = String(order?.payment_method || '').toLowerCase();
+  const title = String(order?.payment_method_title || '').toLowerCase();
+  if (method === 'cod' || title.includes('cash on delivery') || title === 'cod') return 'COD';
+  if (config.defaults.paymentMode === 'COD') return 'COD';
+  return 'Prepaid';
+}
+

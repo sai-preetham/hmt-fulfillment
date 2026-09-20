@@ -1,4 +1,5 @@
 import { createFedexShipment, mapWixOrderToFedexShipment, parseFedexShipmentResponse } from '../fedexShip.js';
+import { isWooCommerceRawOrder, wooCommerceOrderToWixLike } from '../wooOrderShape.js';
 
 export const fedexAdapter = {
   code: 'fedex',
@@ -9,10 +10,11 @@ export const fedexAdapter = {
   },
 
   mapOrder(order, config, options = {}) {
+    const normalized = isWooCommerceRawOrder(order) ? wooCommerceOrderToWixLike(order) : order;
     return {
       flow: 'international',
       provider: 'fedex',
-      ...mapWixOrderToFedexShipment(order, config, options)
+      ...mapWixOrderToFedexShipment(normalized, config, options)
     };
   },
 

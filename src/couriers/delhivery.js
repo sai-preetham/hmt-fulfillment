@@ -3,8 +3,10 @@ import {
   calculateInternationalCharge,
   createDelhiveryOrder,
   mapWixOrderToDelhivery,
-  mapAmazonOrderToDelhivery
+  mapAmazonOrderToDelhivery,
+  mapWooCommerceOrderToDelhivery
 } from '../delhivery.js';
+import { isWooCommerceRawOrder } from '../wooOrderShape.js';
 
 export const delhiveryAdapter = {
   code: 'delhivery',
@@ -23,6 +25,9 @@ export const delhiveryAdapter = {
   mapOrder(order, config, options) {
     if (order?.order && order?.address && order?.buyer) {
       return mapAmazonOrderToDelhivery(order, config, options);
+    }
+    if (isWooCommerceRawOrder(order)) {
+      return mapWooCommerceOrderToDelhivery(order, config, options);
     }
     return mapWixOrderToDelhivery(order, config, options);
   },
