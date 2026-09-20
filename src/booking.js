@@ -1,5 +1,5 @@
 import { getCourierAdapter } from './couriers/index.js';
-import { findShipmentByOrderId, updateOrderWixFulfillment, upsertShipment, upsertWixOrder, upsertAmazonOrder, findOrderById } from './store.js';
+import { findShipmentByOrderId, updateOrderWixFulfillment, upsertShipment, upsertWixOrder, upsertAmazonOrder, upsertWooCommerceOrder, findOrderById } from './store.js';
 import { syncShipmentTrackingToWix } from './wixShipmentSync.js';
 import { fetchWixOrder } from './wix.js';
 
@@ -201,6 +201,97 @@ export async function bookAmazonOrderById(orderId, config, metadata = {}) {
   if (!orderRow) throw new Error('Order not found.');
   if (!orderRow.raw_order) throw new Error('Raw order payload is missing.');
   return bookAmazonOrder(orderRow.raw_order, config, {
+    ...metadata,
+    dbOrderId: orderRow.id
+  });
+}
+
+export async function bookWooCommerceOrder(order, config, metadata = {}) {
+  const orderId = order?.id ?? order?.number;
+  if (orderId == null || orderId === '') throw new Error('WooCommerce order is missing id/number.');
+
+  const existing = await findShipmentByOrderId(String(orderId));
+  if (existing?.status === 'booked' && !metadata.allowMultipleShipments) {
+    return { shipment: existing, skipped: true };
+  }
+
+  let persistedOrder = null;
+  if (metadata.dbOrderId) {
+    persistedOrder = { id: metadata.dbOrderId };
+  } else {
+    const upserted = await upsertWooCommerceOrder(order);
+    persistedOrder = upserted?.order || null;
+  }
+
+  const bookingConfig = withShippingMode(config, metadata.shippingMode);
+  const courier = getCourierAdapter(metadata.courierCode || 'delhivery');
+  const payload = courier.mapOrder(order, bookingConfig, {
+    internationalService: metadata.internationalService,
+    reverse: metadata.reverse,
+    orderNumberOverride: metadata.orderNumberOverride,
+    deliveryOverride: metadata.deliveryOverride
+  });
+  const pending = await upsertShipment({
+    ...metadata,
+    createNewShipment: metadata.allowMultipleShipments,
+    dbOrderId: persistedOrder?.id || metadata.dbOrderId,
+    orderId: String(orderId),
+    orderNumber: payload.shipments?.[0]?.order || metadata.orderNumberOverride || order?.number || String(orderId),
+    courierCode: courier.code,
+    status: bookingConfig.createAwbOnBook ? 'pending' : 'pending-zone',
+    requestPayload: payload
+  });
+
+  if (!bookingConfig.createAwbOnBook) {
+    return {
+      shipment: {
+        ...pending,
+        message: 'Queued pending. AWB creation is disabled by CREATE_AWB_ON_BOOK=false.'
+      },
+      skipped: false
+    };
+  }
+
+  if (payload.flow === 'international' && courier.code !== 'fedex') {
+    const queued = await upsertShipment({
+      ...pending,
+      status: 'pending-international',
+      error: '',
+      delhiveryResponse: null,
+      waybill: '',
+      message:
+        'International order queued. Domestic CMU API cannot create this AWB; configure Delhivery international API endpoint/schema to manifest it.'
+    });
+    return { shipment: queued, skipped: false };
+  }
+
+  try {
+    const delhiveryResponse = await courier.createShipment(payload, bookingConfig);
+    const booked = await upsertShipment({
+      ...pending,
+      status: 'booked',
+      delhiveryResponse,
+      waybill: extractWaybill(delhiveryResponse),
+      error: ''
+    });
+    // Woo bookings must not create Wix fulfillments. Channel write-back (if any)
+    // is handled separately by Woo shipment sync, not here.
+    return { shipment: booked, skipped: false };
+  } catch (error) {
+    const failed = await upsertShipment({
+      ...pending,
+      status: 'failed',
+      error: error.message
+    });
+    throw Object.assign(error, { shipment: failed });
+  }
+}
+
+export async function bookWooCommerceOrderById(orderId, config, metadata = {}) {
+  const orderRow = await findOrderById(orderId);
+  if (!orderRow) throw new Error('Order not found.');
+  if (!orderRow.raw_order) throw new Error('Raw WooCommerce order payload is missing.');
+  return bookWooCommerceOrder(orderRow.raw_order, config, {
     ...metadata,
     dbOrderId: orderRow.id
   });

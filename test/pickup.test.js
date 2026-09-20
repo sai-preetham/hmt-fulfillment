@@ -56,6 +56,12 @@ function pickupHarness({ status = 'booked', wix = true, syncFails = false } = {}
   const mocks = {
     './pickup.js': { isAwaitingWarehousePickup, canConfirmPickup },
     './shipment-dedup': { findMatchingShipment: () => null, isDuplicateShipmentError: () => false },
+    './direct-courier-booking.js': {
+      directCourierBookingDeniedReason: () => null,
+      normalizeDirectBookingSource: source => String(source || 'wix').toLowerCase(),
+      hasDirectCourierBookingIdentity: () => true,
+      isDirectCourierBookableSource: () => true
+    },
     '@/lib/supabase/server': { createServiceClient: () => client },
     './order-search': {}, '@/src/shipmentValidation.js': {}, './seed': {},
     '@/src/store.js': { findOrderById: async () => order },
