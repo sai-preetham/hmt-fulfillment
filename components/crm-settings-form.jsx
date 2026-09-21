@@ -11,6 +11,9 @@ export function CrmSettingsForm({ settings, supabaseConfigured }) {
     setBusy(true);
     setMessage('');
     const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+    if (body.whatsapp_order_confirmation_enabled_at) {
+      body.whatsapp_order_confirmation_enabled_at = new Date(body.whatsapp_order_confirmation_enabled_at).toISOString();
+    }
     const response = await fetch('/api/crm/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -196,6 +199,36 @@ export function CrmSettingsForm({ settings, supabaseConfigured }) {
             <span>Tracking batch size</span>
             <input name="tracking_batch_size" type="number" defaultValue={automation.trackingBatchSize} />
           </label>
+          <h3 className="formSection">WhatsApp order confirmations</h3>
+          <label className="checkItem full">
+            <input type="checkbox" name="whatsapp_order_confirmation_enabled" defaultChecked={automation.whatsappOrderConfirmationEnabled} />
+            <span>Send the approved WhatsApp template once for each new paid order</span>
+          </label>
+          <label>
+            <span>Start sending from</span>
+            <input name="whatsapp_order_confirmation_enabled_at" type="datetime-local" defaultValue={dateTimeLocal(automation.whatsappOrderConfirmationEnabledAt)} />
+          </label>
+          <label>
+            <span>Chatwoot WhatsApp inbox ID</span>
+            <input name="whatsapp_inbox_id" inputMode="numeric" defaultValue={automation.whatsappInboxId} />
+          </label>
+          <label>
+            <span>Meta template name</span>
+            <input name="whatsapp_order_template_name" defaultValue={automation.whatsappOrderTemplateName} />
+          </label>
+          <label>
+            <span>Template language</span>
+            <input name="whatsapp_order_template_language" defaultValue={automation.whatsappOrderTemplateLanguage} />
+          </label>
+          <label>
+            <span>Template category</span>
+            <select name="whatsapp_order_template_category" defaultValue={automation.whatsappOrderTemplateCategory}>
+              <option value="UTILITY">Utility</option>
+              <option value="MARKETING">Marketing</option>
+              <option value="AUTHENTICATION">Authentication</option>
+            </select>
+          </label>
+          <p className="muted full">Variables: customer name, order number, then the ordered product. The start time prevents accidental messages to historical orders.</p>
         </div>
       </section>
 
@@ -205,4 +238,12 @@ export function CrmSettingsForm({ settings, supabaseConfigured }) {
       </div>
     </form>
   );
+}
+
+function dateTimeLocal(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }

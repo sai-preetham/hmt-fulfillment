@@ -42,7 +42,13 @@ test('normalizes settings form payload into typed settings', () => {
     pickup_location: 'HMT Warehouse',
     tracking_enabled: 'on',
     tracking_interval_minutes: '20',
-    tracking_batch_size: '30'
+    tracking_batch_size: '30',
+    whatsapp_order_confirmation_enabled: 'on',
+    whatsapp_order_confirmation_enabled_at: '2026-09-21T10:30:00.000Z',
+    whatsapp_inbox_id: '1',
+    whatsapp_order_template_name: 'order_management_no_cta_5',
+    whatsapp_order_template_language: 'en_US',
+    whatsapp_order_template_category: 'utility'
   });
 
   assert.equal(settings.shipment_defaults.domestic.weightGrams, 400);
@@ -51,6 +57,10 @@ test('normalizes settings form payload into typed settings', () => {
   assert.equal(settings.automation_defaults.trackingEnabled, true);
   assert.equal(settings.automation_defaults.trackingIntervalMinutes, 20);
   assert.equal(settings.automation_defaults.trackingBatchSize, 30);
+  assert.equal(settings.automation_defaults.whatsappOrderConfirmationEnabled, true);
+  assert.equal(settings.automation_defaults.whatsappOrderConfirmationEnabledAt, '2026-09-21T10:30:00.000Z');
+  assert.equal(settings.automation_defaults.whatsappOrderTemplateName, 'order_management_no_cta_5');
+  assert.equal(settings.automation_defaults.whatsappOrderTemplateCategory, 'UTILITY');
 });
 
 test('applies CRM settings onto runtime courier config without replacing secrets', () => {

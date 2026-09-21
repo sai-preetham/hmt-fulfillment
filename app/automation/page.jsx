@@ -45,7 +45,7 @@ export default async function AutomationPage() {
         <article className="card metric"><span>Last run</span><strong>{lastRun?.started_at ? new Date(lastRun.started_at).toLocaleTimeString('en-IN') : '-'}</strong><small>{lastRun?.trigger || 'Waiting'}</small></article>
         <article className="card metric"><span>Next expected</span><strong>{data.nextRunHint ? new Date(data.nextRunHint).toLocaleTimeString('en-IN') : '-'}</strong><small>15 minute timer</small></article>
         <article className="card metric"><span>Booked</span><strong>{counters.booked || 0}</strong><small>{counters.queued || 0} queued</small></article>
-        <article className="card metric"><span>Updated</span><strong>{counters.wixUpdated || 0} / {counters.messagesSent || 0}</strong><small>Wix / Chatwoot</small></article>
+        <article className="card metric"><span>Updated</span><strong>{counters.wixUpdated || 0} / {counters.orderConfirmationsSent || 0}</strong><small>Wix / WhatsApp confirmations</small></article>
       </section>
 
       <section className="grid threeCol" style={{ marginTop: 14 }}>
