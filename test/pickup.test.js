@@ -77,18 +77,32 @@ function pickupHarness({ status = 'booked', wix = true, woo = false, syncFails =
     }) },
     './data-settings': { getCrmSettings: async () => ({}) },
     './settings': { applyCrmSettingsToConfig: config => config },
-    '@/src/wixShipmentSync.js': { fulfillManualShipmentInWix: async (_, picked) => {
-      calls++;
-      assert.equal(picked.status, status === 'booked' ? 'picked-up' : status);
-      order = { ...order, wix_fulfillment_status: syncFails ? 'failed' : 'fulfilled', wix_fulfillment_error: syncFails ? 'Wix unavailable' : null };
-    } },
+    '@/src/shipmentChannelFulfillment.js': {
+      fulfillShipmentChannelsOnPickup: async (ord, picked) => {
+        assert.equal(picked.status, status === 'booked' ? 'picked-up' : status);
+        let wix = null;
+        if (ord.wix_order_id) {
+          calls++;
+          order = {
+            ...order,
+            wix_fulfillment_status: syncFails ? 'failed' : 'fulfilled',
+            wix_fulfillment_error: syncFails ? 'Wix unavailable' : null,
+            awb_number: picked.waybill,
+            wix_fulfillment_id: syncFails ? null : 'ful-1'
+          };
+          wix = syncFails ? { ok: false, error: 'Wix unavailable' } : { status: 'fulfilled' };
+        }
+        let wooResult = null;
+        if (ord.source === 'woocommerce' && ord.woo_order_id) {
+          wooCalls++;
+          wooResult = wooFails ? { ok: false, error: 'Woo unavailable' } : { ok: true };
+        }
+        return { wix, woo: wooResult };
+      }
+    },
     '@/src/wooShipmentSync.js': {
       isWooCommerceOrder: o => o?.source === 'woocommerce' && Boolean(o?.woo_order_id),
-      writeWooShipmentOnPickedUp: async () => {
-        wooCalls++;
-        if (wooFails) return { ok: false, error: 'Woo unavailable' };
-        return { ok: true };
-      },
+      writeWooShipmentOnPickedUp: async () => ({ ok: true }),
       writeWooShipmentOnBooked: async () => ({ ok: true })
     }
   };

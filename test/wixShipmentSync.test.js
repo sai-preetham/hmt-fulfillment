@@ -47,13 +47,54 @@ test('keeps a generated AWB local and does not fulfill Wix before pickup', async
   }
 });
 
-test('carrier pickup does not fulfill Wix without an operator action', async () => {
+test('carrier pickup before picked-up still does not fulfill Wix', async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => { throw new Error('Automatic pickup must not make requests'); };
+  globalThis.fetch = async () => { throw new Error('booked status must not fulfill'); };
   try {
-    assert.equal(await markShipmentPickedUpInWix({ order_id: 'order-1', waybill: 'AWB123', status: 'picked-up' }, config()), null);
+    assert.equal(await markShipmentPickedUpInWix({ order_id: 'order-1', waybill: 'AWB123', status: 'booked' }, config()), null);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test('carrier pickup at picked-up fulfills Wix via shared helper', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  let orderRow = {
+    id: 'order-db-id',
+    wix_order_id: 'wix-order-1',
+    wix_fulfillment_status: 'awaiting-pickup',
+    awb_number: 'AWB123',
+    raw_order: { lineItems: [{ id: 'line-1', quantity: 1 }] }
+  };
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
+    if (String(url).includes('/rest/v1/orders') && (options.method || 'GET') === 'GET') {
+      return jsonResponse([orderRow]);
+    }
+    if (String(url).includes('/rest/v1/orders') && options.method === 'PATCH') {
+      orderRow = { ...orderRow, ...requests.at(-1).body };
+      return jsonResponse([{ ...orderRow }]);
+    }
+    if (String(url).includes('/create-fulfillment')) {
+      return jsonResponse({ fulfillment: { id: 'fulfillment-tracking' } });
+    }
+    throw new Error(`Unexpected request ${options.method || 'GET'} ${url}`);
+  };
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role';
+  try {
+    const result = await markShipmentPickedUpInWix(
+      { id: 'ship-1', order_id: 'order-db-id', waybill: 'AWB123', status: 'picked-up', courier_code: 'delhivery' },
+      config()
+    );
+    assert.equal(requests.some(request => request.url.includes('/create-fulfillment')), true);
+    assert.equal(orderRow.wix_fulfillment_status, 'fulfilled');
+    assert.ok(result);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   }
 });
 

@@ -25,7 +25,8 @@ export default async function PickupPage({ searchParams }) {
           <h1>Awaiting warehouse pickup</h1>
           <p className="muted">
             All carriers with an AWB that the courier has not collected yet ({awaitingCount} waiting).
-            After collection, select Mark picked up to record pickup and fulfill the order on Wix.
+            Mark picked up records collection and fulfills Wix (or writes Woo tracking meta). Tracking
+            that reaches picked up or later auto-fulfills the same channels.
           </p>
         </div>
       </header>

@@ -9,7 +9,7 @@ Ops owns shipments. Woo → Ops pull/ingest already exists. This path is the rev
 | Event | Trigger | Woo action |
 | --- | --- | --- |
 | **booked** | Manual AWB save (`bookShipment` / `save_manual_awb`), courier book path via `syncBookedShipmentToWix` companion, automation channel sync for `source=woocommerce` | Upsert order `meta_data` with status `booked` |
-| **picked_up** | Operator **Mark picked up** (`markShipmentPickedUp`) | Upsert same meta with status `picked_up` |
+| **picked_up** | Operator **Mark picked up** (`markShipmentPickedUp`), or carrier tracking ≥ picked-up via `fulfillShipmentChannelsOnPickup` | Upsert same meta with status `picked_up` |
 
 - Only orders with `source=woocommerce` and `woo_order_id` (or Woo `external_order_id`) are written.
 - **Meta-only**: WC order `status` is **not** changed on booked or picked_up (avoids premature `completed`).
