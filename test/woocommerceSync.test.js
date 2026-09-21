@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  fetchWooCommerceAbandonedCarts,
   fetchWooCommerceOrders,
   nextWooWatermarkFromOrders,
   resolveWooModifiedAfterWatermark,
@@ -75,6 +76,18 @@ test('fetchWooCommerceOrders pages with modified_after and Basic auth', async ()
   assert.match(calls[0].url, /modified_after=/);
   assert.match(calls[0].url, /orderby=modified/);
   assert.equal(calls[0].headers.Authorization, wooBasicAuthHeader('ck_test', 'cs_test'));
+});
+
+test('fetchWooCommerceAbandonedCarts requests checkout-draft orders', async () => {
+  let requestedUrl = '';
+  const config = { woocommerce: { baseUrl: 'https://wp.example.com', consumerKey: 'ck', consumerSecret: 'cs' } };
+  await fetchWooCommerceAbandonedCarts(config, {
+    fetchImpl: async url => {
+      requestedUrl = String(url);
+      return { ok: true, status: 200, headers: new Headers(), json: async () => [] };
+    }
+  });
+  assert.equal(new URL(requestedUrl).searchParams.get('status'), 'checkout-draft');
 });
 
 test('watermark helpers bound cold runs and advance from orders', () => {

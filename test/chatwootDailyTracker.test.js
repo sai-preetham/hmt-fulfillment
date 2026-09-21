@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildOrderConfirmationTemplate, formatChatwootDailyTracker, getChatwootDailyTracker, sendChatwootOrderConfirmation, summarizeAssigneeBacklog } from '../lib/crm/chatwoot.js';
+import { buildOrderConfirmationTemplate, formatChatwootDailyTracker, getChatwootDailyTracker, sendChatwootAbandonedCartFollowUp, sendChatwootOrderConfirmation, summarizeAssigneeBacklog } from '../lib/crm/chatwoot.js';
 
 const bounds = {
   date: '2026-09-14',
@@ -138,6 +138,33 @@ test('creates a Chatwoot contact and conversation when the buyer is new', async 
   assert.equal(JSON.parse(contact.options.body).phone_number, '+919999999999');
   const conversation = requests.find(request => request.url.pathname.endsWith('/conversations') && request.options.method === 'POST');
   assert.deepEqual(JSON.parse(conversation.options.body), { source_id: '919999999999', inbox_id: 1, contact_id: 70, status: 'open' });
+});
+
+test('sends abandoned_cart with customer, motorcycle, and checkout URL parameters', async () => {
+  const requests = [];
+  const fetchImpl = async (input, options = {}) => {
+    const url = new URL(input);
+    requests.push({ url, options });
+    if (url.pathname.endsWith('/contacts/search')) return jsonResponse({ payload: [{ id: 56, phone_number: '+919876543210' }] });
+    if (url.pathname.endsWith('/contacts/56/conversations')) return jsonResponse({ payload: [{ id: 1303, inbox_id: 1 }] });
+    if (url.pathname.endsWith('/conversations/1303/messages')) return jsonResponse({ id: 19321 });
+    return jsonResponse({ error: 'unexpected' }, 404);
+  };
+
+  await sendChatwootAbandonedCartFollowUp({
+    customer_name: 'John', phone: '98765 43210',
+    checkout_url: 'https://www.holdmythrottle.com/product-page/scrambler-400-x-hmt',
+    items: [{ name: 'HMT Cruise Kit - Himalayan 450' }]
+  }, {
+    inboxId: '1', templateName: 'abandoned_cart', buttonUrl: 'https://www.holdmythrottle.com/product-page/{{1}}', fetchImpl,
+    env: { CHATWOOT_BASE_URL: 'https://chat.example.com', CHATWOOT_ACCOUNT_ID: '7', CHATWOOT_API_TOKEN: 'token' }
+  });
+
+  const message = requests.find(request => request.url.pathname.endsWith('/conversations/1303/messages'));
+  const template = JSON.parse(message.options.body).template_params;
+  assert.equal(template.name, 'abandoned_cart');
+  assert.deepEqual(template.processed_params.body, { a: 'John', b: 'Himalayan 450' });
+  assert.deepEqual(template.processed_params.buttons, [{ type: 'url', parameter: 'scrambler-400-x-hmt', url: 'https://www.holdmythrottle.com/product-page/{{1}}', variables: ['1'] }]);
 });
 
 function jsonResponse(payload, status = 200) {
