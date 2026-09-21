@@ -52,6 +52,17 @@ export function getConfig() {
         intervalMs: positiveNumber(process.env.WOO_ORDER_SYNC_INTERVAL_MINUTES, 15) * 60 * 1000,
         pageSize: clamp(Number(process.env.WOO_ORDER_SYNC_PAGE_SIZE || 25), 1, 100),
         maxPages: clamp(Number(process.env.WOO_ORDER_SYNC_MAX_PAGES || 3), 1, 20)
+      },
+      abandonedCartSync: {
+        enabled: process.env.WOO_ABANDONED_CART_SYNC_ENABLED === 'true',
+        minimumAgeMinutes: positiveNumber(process.env.WOO_ABANDONED_CART_MINIMUM_AGE_MINUTES, 60),
+        pageSize: clamp(Number(process.env.WOO_ABANDONED_CART_PAGE_SIZE || 50), 1, 100),
+        maxPages: clamp(Number(process.env.WOO_ABANDONED_CART_MAX_PAGES || 10), 1, 50),
+        sendWhatsApp: process.env.WOO_ABANDONED_CART_WHATSAPP_ENABLED === 'true',
+        templateName: process.env.WHATSAPP_ABANDONED_CART_TEMPLATE || 'abandoned_cart',
+        templateLanguage: process.env.WHATSAPP_ABANDONED_CART_LANGUAGE || 'en',
+        templateCategory: process.env.WHATSAPP_ABANDONED_CART_CATEGORY || 'MARKETING',
+        templateButtonUrl: process.env.WHATSAPP_ABANDONED_CART_BUTTON_URL || 'https://www.holdmythrottle.com/product-page/{{1}}'
       }
     },
     supabase: {

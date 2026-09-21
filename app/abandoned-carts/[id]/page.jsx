@@ -18,7 +18,9 @@ export default async function AbandonedCartLeadPage({ params }) {
     <section className="grid orderOpsGrid">
       <article className="panel opsMain"><div className="panelHeader"><h2>Customer & cart</h2></div><div className="panelBody detailList">
         <Detail label="Phone" value={lead.phone || '-'} /><Detail label="Email" value={lead.email || '-'} /><Detail label="Abandoned" value={formatDate(lead.wix_created_at)} /><Detail label="Last cart activity" value={formatDate(lead.wix_updated_at)} />
-        <Detail label="Cart value" value={`${lead.currency || 'INR'} ${lead.cart_value || 0}`} /><Detail label="Wix status" value={lead.wix_status || '-'} />
+        <Detail label="Cart value" value={`${lead.currency || 'INR'} ${lead.cart_value || 0}`} /><Detail label="Source" value={lead.source === 'woocommerce' ? 'WooCommerce' : 'Wix'} /><Detail label="Cart status" value={lead.wix_status || '-'} />
+        <Detail label="WhatsApp follow-up" value={lead.follow_up_status || 'Not sent'} /><Detail label="WhatsApp sent" value={formatDate(lead.follow_up_sent_at)} />
+        {lead.follow_up_error ? <Detail label="WhatsApp error" value={lead.follow_up_error} /> : null}
         <Detail label="Items" value={(lead.items || []).map(item => item.productName?.translated || item.productName?.original || item.productName || item.name || item.product?.name).filter(name => typeof name === 'string').join(', ') || '-'} />
       </div></article>
       <article className="panel"><div className="panelHeader"><h2>Recovery</h2></div><div className="panelBody detailList">

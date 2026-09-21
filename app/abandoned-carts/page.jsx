@@ -11,7 +11,7 @@ export default async function AbandonedCartsPage({ searchParams }) {
   const leads = filterLeads(allLeads, filters || {});
   const dueLeads = allLeads.filter(lead => isDue(lead));
   return <AppShell>
-    <header className="pageHeader"><div><p className="eyebrow">Lead management</p><h1>Abandoned carts</h1><p className="muted">A shared recovery queue for Wix shoppers.</p></div><SyncCarts /></header>
+    <header className="pageHeader"><div><p className="eyebrow">Lead management</p><h1>Abandoned carts</h1><p className="muted">A shared recovery queue for Wix and WooCommerce shoppers.</p></div><SyncCarts /></header>
     {dueLeads.length ? <Link className="followUpAlert" href="/abandoned-carts?due=due"><strong>{dueLeads.length} follow-up{dueLeads.length === 1 ? '' : 's'} due</strong><span>Open the due queue →</span></Link> : null}
     <section className="panel"><div className="panelBody"><form className="leadFilters" action="/abandoned-carts">
       <input name="q" defaultValue={filters?.q || ''} placeholder="Search name, email, phone, or cart item" />

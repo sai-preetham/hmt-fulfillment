@@ -48,6 +48,13 @@ export async function fetchWooCommerceOrders(config, options = {}) {
   };
 }
 
+export async function fetchWooCommerceAbandonedCarts(config, options = {}) {
+  return fetchWooCommerceOrders(config, {
+    ...options,
+    status: 'checkout-draft'
+  });
+}
+
 export function wooBasicAuthHeader(consumerKey, consumerSecret) {
   const token = Buffer.from(`${consumerKey}:${consumerSecret}`, 'utf8').toString('base64');
   return `Basic ${token}`;
