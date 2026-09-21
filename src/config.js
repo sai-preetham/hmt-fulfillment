@@ -59,6 +59,14 @@ export function getConfig() {
       serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
       anonKey: process.env.SUPABASE_ANON_KEY || ''
     },
+    chatwoot: {
+      orderConfirmationEnabled: process.env.WHATSAPP_ORDER_CONFIRMATION_ENABLED === 'true',
+      orderConfirmationEnabledAt: process.env.WHATSAPP_ORDER_CONFIRMATION_ENABLED_AT || '',
+      inboxId: process.env.CHATWOOT_WHATSAPP_INBOX_ID || '1',
+      orderTemplateName: process.env.WHATSAPP_ORDER_CONFIRMATION_TEMPLATE || 'order_management_no_cta_5',
+      orderTemplateLanguage: process.env.WHATSAPP_ORDER_CONFIRMATION_LANGUAGE || 'en_US',
+      orderTemplateCategory: process.env.WHATSAPP_ORDER_CONFIRMATION_CATEGORY || 'UTILITY'
+    },
     delhivery: {
       env: delhiveryEnv,
       token: process.env.DELHIVERY_API_TOKEN || '',

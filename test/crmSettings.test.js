@@ -117,3 +117,21 @@ test('keeps env pickup location when CRM pickup setting is blank', () => {
 
   assert.equal(updated.delhivery.pickupLocation, 'Env Pickup');
 });
+
+test('uses environment-backed WhatsApp confirmation settings when CRM settings are unavailable', () => {
+  const config = {
+    wix: {}, delhivery: {}, defaults: {},
+    chatwoot: {
+      orderConfirmationEnabled: true,
+      orderConfirmationEnabledAt: '2026-09-21T10:00:00.000Z',
+      inboxId: '1',
+      orderTemplateName: 'order_management_no_cta_5',
+      orderTemplateLanguage: 'en_US',
+      orderTemplateCategory: 'UTILITY'
+    }
+  };
+  const updated = applyCrmSettingsToConfig(config, {});
+  assert.equal(updated.chatwoot.orderConfirmationEnabled, true);
+  assert.equal(updated.chatwoot.orderConfirmationEnabledAt, '2026-09-21T10:00:00.000Z');
+  assert.equal(updated.chatwoot.orderTemplateName, 'order_management_no_cta_5');
+});
