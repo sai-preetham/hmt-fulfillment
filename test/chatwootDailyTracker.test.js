@@ -82,8 +82,9 @@ test('sends the approved Meta template through an existing Chatwoot conversation
     const url = new URL(input);
     requests.push({ url, options });
     if (url.pathname.endsWith('/contacts/search')) {
-      return jsonResponse({ payload: [{ id: 56, name: 'John', phone_number: '+919876543210', contact_inboxes: [{ source_id: '919876543210', inbox: { id: 1 } }] }] });
+      return jsonResponse({ payload: [{ id: 56, name: 'John', phone_number: '+919876543210', custom_attributes: { order_count: 2, favorite_color: 'blue' }, contact_inboxes: [{ source_id: '919876543210', inbox: { id: 1 } }] }] });
     }
+    if (url.pathname.endsWith('/contacts/56') && options.method === 'PUT') return jsonResponse({ payload: { contact: { id: 56, phone_number: '+919876543210', contact_inboxes: [{ source_id: '919876543210', inbox: { id: 1 } }] } } });
     if (url.pathname.endsWith('/contacts/56/conversations')) return jsonResponse({ payload: [{ id: 1303, inbox_id: 1, status: 'resolved' }] });
     if (url.pathname.endsWith('/conversations/1303/messages')) return jsonResponse({ id: 19320, status: 'sent' });
     return jsonResponse({ error: 'unexpected' }, 404);
@@ -92,7 +93,7 @@ test('sends the approved Meta template through an existing Chatwoot conversation
   const result = await sendChatwootOrderConfirmation({
     id: 'order-id',
     order_number: '#12345',
-    customers: { name: 'John', phone: '98765 43210' },
+    customers: { name: 'John', phone: '98765 43210', wix_contact_id: 'wix-contact-56' },
     order_items: [{ product_name: 'Himalayan 450' }]
   }, {
     inboxId: '1',
@@ -109,6 +110,15 @@ test('sends the approved Meta template through an existing Chatwoot conversation
   const body = JSON.parse(message.options.body);
   assert.deepEqual(body.template_params.processed_params.body, { 1: 'John', 2: '#12345', 3: 'Himalayan 450' });
   assert.equal(body.template_params.language, 'en_US');
+  const contactUpdate = requests.find(request => request.url.pathname.endsWith('/contacts/56') && request.options.method === 'PUT');
+  assert.deepEqual(JSON.parse(contactUpdate.options.body), { custom_attributes: {
+    order_count: 3,
+    favorite_color: 'blue',
+    bike_model: 'Himalayan 450',
+    is_paid_customer: true,
+    last_order_id: '#12345',
+    wix_contact_id: 'wix-contact-56'
+  } });
 });
 
 test('creates a Chatwoot contact and conversation when the buyer is new', async () => {
@@ -120,6 +130,7 @@ test('creates a Chatwoot contact and conversation when the buyer is new', async 
     if (url.pathname.endsWith('/contacts') && options.method === 'POST') {
       return jsonResponse({ payload: { contact: { id: 70, phone_number: '+919999999999', contact_inboxes: [{ source_id: '919999999999', inbox: { id: 1 } }] } } });
     }
+    if (url.pathname.endsWith('/contacts/70') && options.method === 'PUT') return jsonResponse({ payload: { contact: { id: 70, phone_number: '+919999999999', contact_inboxes: [{ source_id: '919999999999', inbox: { id: 1 } }] } } });
     if (url.pathname.endsWith('/contacts/70/conversations')) return jsonResponse({ payload: [] });
     if (url.pathname.endsWith('/conversations') && options.method === 'POST') return jsonResponse({ id: 1400, inbox_id: 1 });
     if (url.pathname.endsWith('/conversations/1400/messages')) return jsonResponse({ id: 19400, status: 'sent' });
@@ -136,6 +147,10 @@ test('creates a Chatwoot contact and conversation when the buyer is new', async 
   assert.equal(result.conversationId, '1400');
   const contact = requests.find(request => request.url.pathname.endsWith('/contacts') && request.options.method === 'POST');
   assert.equal(JSON.parse(contact.options.body).phone_number, '+919999999999');
+  const contactUpdate = requests.find(request => request.url.pathname.endsWith('/contacts/70') && request.options.method === 'PUT');
+  assert.deepEqual(JSON.parse(contactUpdate.options.body), { custom_attributes: {
+    bike_model: 'KTM 390', is_paid_customer: true, order_count: 1, last_order_id: '1002'
+  } });
   const conversation = requests.find(request => request.url.pathname.endsWith('/conversations') && request.options.method === 'POST');
   assert.deepEqual(JSON.parse(conversation.options.body), { source_id: '919999999999', inbox_id: 1, contact_id: 70, status: 'open' });
 });
