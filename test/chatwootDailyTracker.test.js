@@ -127,13 +127,15 @@ test('creates a Chatwoot contact and conversation when the buyer is new', async 
   };
 
   const result = await sendChatwootOrderConfirmation({
-    id: 'new-order', order_number: '1002', customers: { name: 'Asha', phone: '+91 99999 99999' }, order_items: [{ product_name: 'KTM 390' }]
+    id: 'new-order', order_number: '1002', customers: { name: 'Asha', phone: '09999999999' }, order_items: [{ product_name: 'KTM 390' }]
   }, {
     inboxId: '1', fetchImpl,
     env: { CHATWOOT_BASE_URL: 'https://chat.example.com', CHATWOOT_ACCOUNT_ID: '7', CHATWOOT_API_TOKEN: 'token' }
   });
 
   assert.equal(result.conversationId, '1400');
+  const contact = requests.find(request => request.url.pathname.endsWith('/contacts') && request.options.method === 'POST');
+  assert.equal(JSON.parse(contact.options.body).phone_number, '+919999999999');
   const conversation = requests.find(request => request.url.pathname.endsWith('/conversations') && request.options.method === 'POST');
   assert.deepEqual(JSON.parse(conversation.options.body), { source_id: '919999999999', inbox_id: 1, contact_id: 70, status: 'open' });
 });
