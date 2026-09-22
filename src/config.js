@@ -52,6 +52,10 @@ export function getConfig() {
         intervalMs: positiveNumber(process.env.WOO_ORDER_SYNC_INTERVAL_MINUTES, 15) * 60 * 1000,
         pageSize: clamp(Number(process.env.WOO_ORDER_SYNC_PAGE_SIZE || 25), 1, 100),
         maxPages: clamp(Number(process.env.WOO_ORDER_SYNC_MAX_PAGES || 3), 1, 20)
+      },
+      // Fail-closed: Ops → Woo shipment meta write-back off unless explicitly enabled.
+      shipmentWriteback: {
+        enabled: process.env.WOO_SHIPMENT_WRITEBACK_ENABLED === 'true'
       }
     },
     supabase: {

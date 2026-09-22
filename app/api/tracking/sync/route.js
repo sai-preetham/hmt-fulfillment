@@ -4,6 +4,7 @@ import { applyCrmSettingsToConfig } from '@/lib/crm/settings';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getConfig } from '@/src/config.js';
 import { createDelhiveryTrackingSync } from '@/src/delhiveryTracking.js';
+import { createTrackingPickupFulfillHandler } from '@/src/shipmentChannelFulfillment.js';
 
 export async function POST(request) {
   if (!isAuthorizedAutomationRequest(request)) return automationUnauthorizedResponse();
@@ -19,7 +20,8 @@ export async function POST(request) {
     },
     {
       setTimer: () => null,
-      clearTimer: () => null
+      clearTimer: () => null,
+      onShipmentStatusChanged: createTrackingPickupFulfillHandler(config)
     }
   );
 

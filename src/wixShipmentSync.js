@@ -34,8 +34,11 @@ export async function markOrderPackedInWix(orderId, config) {
 }
 
 export async function markShipmentPickedUpInWix(shipment, config) {
-  // Carrier events update tracking locally; fulfillment requires an operator action.
-  return null;
+  // Carrier tracking ≥ picked-up: fulfill Wix (+ Woo meta via shared helper).
+  // Kept for callers that only import this module; prefer fulfillChannelsForTrackingStatusChange.
+  if (!isPickedUpOrLater(shipment?.status)) return null;
+  const { fulfillChannelsForTrackingStatusChange } = await import('./shipmentChannelFulfillment.js');
+  return fulfillChannelsForTrackingStatusChange(shipment, config);
 }
 
 /**
