@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatChatwootDailyTracker, getChatwootDailyTracker, summarizeAssigneeBacklog } from '../lib/crm/chatwoot.js';
+import { buildOrderConfirmationTemplate, formatChatwootDailyTracker, getChatwootDailyTracker, sendChatwootOrderConfirmation, summarizeAssigneeBacklog } from '../lib/crm/chatwoot.js';
 
 const bounds = {
   date: '2026-09-14',
@@ -62,6 +62,82 @@ test('formats a readable Discord tracker', () => {
   assert.match(message, /Opened during the day: \*\*12\*\*/);
   assert.match(message, /Current backlog: \*\*5\*\*/);
   assert.match(message, /Asha: 3 \(open 2, pending 1\)/);
+});
+
+test('builds approved order confirmation variables from an Ops order', () => {
+  const template = buildOrderConfirmationTemplate({
+    order_number: '#12345',
+    customers: { name: 'John' },
+    order_items: [{ product_name: 'Himalayan 450' }]
+  });
+  assert.equal(template.customerName, 'John');
+  assert.equal(template.orderNumber, '#12345');
+  assert.equal(template.product, 'Himalayan 450');
+  assert.match(template.content, /Hello John/);
+});
+
+test('sends the approved Meta template through an existing Chatwoot conversation', async () => {
+  const requests = [];
+  const fetchImpl = async (input, options = {}) => {
+    const url = new URL(input);
+    requests.push({ url, options });
+    if (url.pathname.endsWith('/contacts/search')) {
+      return jsonResponse({ payload: [{ id: 56, name: 'John', phone_number: '+919876543210', contact_inboxes: [{ source_id: '919876543210', inbox: { id: 1 } }] }] });
+    }
+    if (url.pathname.endsWith('/contacts/56/conversations')) return jsonResponse({ payload: [{ id: 1303, inbox_id: 1, status: 'resolved' }] });
+    if (url.pathname.endsWith('/conversations/1303/messages')) return jsonResponse({ id: 19320, status: 'sent' });
+    return jsonResponse({ error: 'unexpected' }, 404);
+  };
+
+  const result = await sendChatwootOrderConfirmation({
+    id: 'order-id',
+    order_number: '#12345',
+    customers: { name: 'John', phone: '98765 43210' },
+    order_items: [{ product_name: 'Himalayan 450' }]
+  }, {
+    inboxId: '1',
+    templateName: 'order_management_no_cta_5',
+    language: 'en_US',
+    category: 'UTILITY',
+    fetchImpl,
+    env: { CHATWOOT_BASE_URL: 'https://chat.example.com/', CHATWOOT_ACCOUNT_ID: '7', CHATWOOT_API_TOKEN: 'token' }
+  });
+
+  assert.equal(result.providerMessageId, '19320');
+  assert.equal(result.conversationId, '1303');
+  const message = requests.find(request => request.url.pathname.endsWith('/conversations/1303/messages'));
+  const body = JSON.parse(message.options.body);
+  assert.deepEqual(body.template_params.processed_params.body, { 1: 'John', 2: '#12345', 3: 'Himalayan 450' });
+  assert.equal(body.template_params.language, 'en_US');
+});
+
+test('creates a Chatwoot contact and conversation when the buyer is new', async () => {
+  const requests = [];
+  const fetchImpl = async (input, options = {}) => {
+    const url = new URL(input);
+    requests.push({ url, options });
+    if (url.pathname.endsWith('/contacts/search')) return jsonResponse({ payload: [] });
+    if (url.pathname.endsWith('/contacts') && options.method === 'POST') {
+      return jsonResponse({ payload: { contact: { id: 70, phone_number: '+919999999999', contact_inboxes: [{ source_id: '919999999999', inbox: { id: 1 } }] } } });
+    }
+    if (url.pathname.endsWith('/contacts/70/conversations')) return jsonResponse({ payload: [] });
+    if (url.pathname.endsWith('/conversations') && options.method === 'POST') return jsonResponse({ id: 1400, inbox_id: 1 });
+    if (url.pathname.endsWith('/conversations/1400/messages')) return jsonResponse({ id: 19400, status: 'sent' });
+    return jsonResponse({ error: 'unexpected' }, 404);
+  };
+
+  const result = await sendChatwootOrderConfirmation({
+    id: 'new-order', order_number: '1002', customers: { name: 'Asha', phone: '09999999999' }, order_items: [{ product_name: 'KTM 390' }]
+  }, {
+    inboxId: '1', fetchImpl,
+    env: { CHATWOOT_BASE_URL: 'https://chat.example.com', CHATWOOT_ACCOUNT_ID: '7', CHATWOOT_API_TOKEN: 'token' }
+  });
+
+  assert.equal(result.conversationId, '1400');
+  const contact = requests.find(request => request.url.pathname.endsWith('/contacts') && request.options.method === 'POST');
+  assert.equal(JSON.parse(contact.options.body).phone_number, '+919999999999');
+  const conversation = requests.find(request => request.url.pathname.endsWith('/conversations') && request.options.method === 'POST');
+  assert.deepEqual(JSON.parse(conversation.options.body), { source_id: '919999999999', inbox_id: 1, contact_id: 70, status: 'open' });
 });
 
 function jsonResponse(payload, status = 200) {
