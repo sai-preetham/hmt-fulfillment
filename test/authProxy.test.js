@@ -8,7 +8,7 @@ function requestFor(hostname, pathname = '/', authorization = '') {
       hostname,
       pathname
     },
-    headers: new Headers(authorization ? { authorization } : {})
+    headers: new Headers({ host: hostname, ...(authorization ? { authorization } : {}) })
   };
 }
 
@@ -37,6 +37,12 @@ test('only the bulk document page is publicly accessible', () => {
   assert.equal(isPublicRoute(requestFor('ops.holdmythrottle.com', '/bulk/')), true);
   assert.equal(isPublicRoute(requestFor('ops.holdmythrottle.com', '/bulk/orders')), false);
   assert.equal(isPublicRoute(requestFor('ops.holdmythrottle.com', '/orders')), false);
+});
+
+test('tracking IDs are public only on the tracking hostname', () => {
+  assert.equal(isPublicRoute(requestFor('track.holdmythrottle.com', '/52270010001982')), true);
+  assert.equal(isPublicRoute(requestFor('ops.holdmythrottle.com', '/52270010001982')), false);
+  assert.equal(isPublicRoute(requestFor('track.holdmythrottle.com', '/orders')), false);
 });
 
 test('automation bearer bypass is limited to protected automation APIs', () => {
