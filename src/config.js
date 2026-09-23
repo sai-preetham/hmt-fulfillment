@@ -69,7 +69,12 @@ export function getConfig() {
       inboxId: process.env.CHATWOOT_WHATSAPP_INBOX_ID || '1',
       orderTemplateName: process.env.WHATSAPP_ORDER_CONFIRMATION_TEMPLATE || 'order_management_no_cta_5',
       orderTemplateLanguage: process.env.WHATSAPP_ORDER_CONFIRMATION_LANGUAGE || 'en_US',
-      orderTemplateCategory: process.env.WHATSAPP_ORDER_CONFIRMATION_CATEGORY || 'UTILITY'
+      orderTemplateCategory: process.env.WHATSAPP_ORDER_CONFIRMATION_CATEGORY || 'UTILITY',
+      shipmentConfirmationEnabled: process.env.WHATSAPP_SHIPMENT_CONFIRMATION_ENABLED === 'true',
+      shipmentTemplateName: process.env.WHATSAPP_SHIPMENT_CONFIRMATION_TEMPLATE || 'shipment_confirmation_3',
+      shipmentTemplateLanguage: process.env.WHATSAPP_SHIPMENT_CONFIRMATION_LANGUAGE || 'en_US',
+      shipmentTemplateCategory: process.env.WHATSAPP_SHIPMENT_CONFIRMATION_CATEGORY || 'UTILITY',
+      shipmentTrackingButtonUrl: process.env.WHATSAPP_SHIPMENT_TRACKING_BUTTON_URL || 'https://track.holdmythrottle.com/{{1}}'
     },
     delhivery: {
       env: delhiveryEnv,

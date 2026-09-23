@@ -4,6 +4,7 @@ import { getCrmSettings } from '@/lib/crm/data-settings';
 import { getConfig } from '@/src/config.js';
 import { findLatestShipmentForOrder, findOrderById, findShipmentById } from '@/src/store.js';
 import { fulfillManualShipmentInWix } from '@/src/wixShipmentSync.js';
+import { sendPickupConfirmationOnce } from '@/lib/crm/whatsapp-notifications';
 
 export async function POST(request, { params }) {
   try {
@@ -21,7 +22,13 @@ export async function POST(request, { params }) {
     await fulfillManualShipmentInWix(order, shipment, config);
     const updated = await findOrderById(id);
     if (updated?.wix_fulfillment_status !== 'fulfilled') return NextResponse.json({ ok: false, error: updated?.wix_fulfillment_error || 'Wix fulfillment was not completed. Please retry.' }, { status: 502 });
-    return NextResponse.json({ ok: true, message: 'Wix marked fulfilled and tracking sent.', order: updated });
+    let whatsapp = null;
+    try {
+      whatsapp = await sendPickupConfirmationOnce(updated || order, shipment, { config });
+    } catch (error) {
+      whatsapp = { status: 'failed', error: error.message };
+    }
+    return NextResponse.json({ ok: true, message: 'Wix marked fulfilled and tracking sent.', order: updated, whatsapp });
   } catch (error) {
     return NextResponse.json({ ok: false, error: error.message || 'Wix fulfillment failed.' }, { status: 500 });
   }
