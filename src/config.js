@@ -70,7 +70,7 @@ export function getConfig() {
       shipmentTemplateName: process.env.WHATSAPP_SHIPMENT_CONFIRMATION_TEMPLATE || 'shipment_confirmation_3',
       shipmentTemplateLanguage: process.env.WHATSAPP_SHIPMENT_CONFIRMATION_LANGUAGE || 'en_US',
       shipmentTemplateCategory: process.env.WHATSAPP_SHIPMENT_CONFIRMATION_CATEGORY || 'UTILITY',
-      shipmentTrackingButtonUrl: process.env.WHATSAPP_SHIPMENT_TRACKING_BUTTON_URL || 'https://holdmythrottle.com/track/{{1}}'
+      shipmentTrackingButtonUrl: process.env.WHATSAPP_SHIPMENT_TRACKING_BUTTON_URL || 'https://track.holdmythrottle.com/{{1}}'
     },
     delhivery: {
       env: delhiveryEnv,

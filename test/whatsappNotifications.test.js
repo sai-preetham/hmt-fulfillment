@@ -35,7 +35,7 @@ test('pickup confirmation remains disabled until production enablement', async (
 });
 
 function config(enabled) {
-  return { chatwoot: { shipmentConfirmationEnabled: enabled, inboxId: '1', shipmentTemplateName: 'shipment_confirmation_3', shipmentTemplateLanguage: 'en_US', shipmentTemplateCategory: 'UTILITY', shipmentTrackingButtonUrl: 'https://holdmythrottle.com/track/{{1}}' } };
+  return { chatwoot: { shipmentConfirmationEnabled: enabled, inboxId: '1', shipmentTemplateName: 'shipment_confirmation_3', shipmentTemplateLanguage: 'en_US', shipmentTemplateCategory: 'UTILITY', shipmentTrackingButtonUrl: 'https://track.holdmythrottle.com/{{1}}' } };
 }
 
 function fakeDb(existing, writes) {

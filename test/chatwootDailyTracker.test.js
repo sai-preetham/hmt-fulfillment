@@ -160,7 +160,7 @@ test('sends the approved pickup template with tracking button parameters', async
   const message = requests.find(request => request.url.pathname.endsWith('/conversations/1303/messages'));
   const body = JSON.parse(message.options.body);
   assert.deepEqual(body.template_params.processed_params.body, { 1: 'John', 2: '#12345', 3: '52270010001890' });
-  assert.deepEqual(body.template_params.processed_params.buttons, [{ type: 'url', parameter: '52270010001890', url: 'https://holdmythrottle.com/track/{{1}}', variables: ['1'] }]);
+  assert.deepEqual(body.template_params.processed_params.buttons, [{ type: 'url', parameter: '52270010001890', url: 'https://track.holdmythrottle.com/{{1}}', variables: ['1'] }]);
 });
 
 function jsonResponse(payload, status = 200) {
