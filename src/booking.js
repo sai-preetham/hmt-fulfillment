@@ -1,6 +1,7 @@
 import { getCourierAdapter } from './couriers/index.js';
 import { findShipmentByOrderId, updateOrderWixFulfillment, upsertShipment, upsertWixOrder, upsertAmazonOrder, upsertWooCommerceOrder, findOrderById } from './store.js';
 import { syncShipmentTrackingToWix } from './wixShipmentSync.js';
+import { writeWooShipmentOnBooked } from './wooShipmentSync.js';
 import { fetchWixOrder } from './wix.js';
 
 export async function bookWixOrder(order, config, metadata = {}) {
@@ -80,7 +81,14 @@ export async function bookWixOrder(order, config, metadata = {}) {
 }
 
 export async function syncBookedShipmentToWix(order, shipment, config) {
-  return syncShipmentTrackingToWix(order, shipment, config);
+  const wixResult = await syncShipmentTrackingToWix(order, shipment, config);
+  // Parallel Woo path for Woo-sourced orders only (soft-fail inside helper).
+  await writeWooShipmentOnBooked(order, shipment, config);
+  return wixResult;
+}
+
+export async function syncBookedShipmentToWoo(order, shipment, config) {
+  return writeWooShipmentOnBooked(order, shipment, config);
 }
 
 export async function bookWixOrderById(orderId, config, metadata = {}) {

@@ -3,10 +3,18 @@ import { applyCrmSettingsToConfig } from '@/lib/crm/settings';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getConfig } from '@/src/config.js';
 import { createDelhiveryTrackingSync } from '@/src/delhiveryTracking.js';
+import { createTrackingPickupFulfillHandler } from '@/src/shipmentChannelFulfillment.js';
 
 export async function POST() {
   const config = applyCrmSettingsToConfig(getConfig(), await loadSettings());
-  const sync = createDelhiveryTrackingSync({ ...config, delhivery: { ...config.delhivery, trackingEnabled: true } }, { setTimer: () => null, clearTimer: () => null });
+  const sync = createDelhiveryTrackingSync(
+    { ...config, delhivery: { ...config.delhivery, trackingEnabled: true } },
+    {
+      setTimer: () => null,
+      clearTimer: () => null,
+      onShipmentStatusChanged: createTrackingPickupFulfillHandler(config)
+    }
+  );
   const tracking = await sync.run('pickup-workspace');
   return NextResponse.json({ ok: !tracking.lastError, tracking }, { status: tracking.lastError ? 500 : 200 });
 }

@@ -57,3 +57,8 @@ Authenticated Ops UI sessions can also POST without the bearer (proxy session au
 - `017_woo_order_id_unique_nonpartial.sql` — converts any already-applied partial index
 
 Apply on Ops Supabase if not already applied.
+
+## Related: Ops → Woo shipment write-back
+
+After AWB book / mark picked up, Ops can push tracking meta to Woo (feature-flagged). See `docs/WOOCOMMERCE_WRITEBACK.md`.
+
